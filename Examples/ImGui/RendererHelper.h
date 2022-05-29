@@ -6,6 +6,7 @@ uint32_t VertexBuffer;
 uint32_t IndexBuffer;
 uint32_t DescriptorSetLayout;
 OpenVkDescriptorPool DescriptorPool;
+OpenVkDescriptorPool ImGuiDescriptorPool;
 uint32_t UniformBuffer;
 uint32_t DescriptorSet;
 
