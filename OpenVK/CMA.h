@@ -3,100 +3,96 @@
 #include <string.h>
 #include <stdint.h>
 
-#define CMA_BLOCK_SIZE 128
+#define CMA_ZONE_SIZE 128
 
 typedef struct
 {
 	size_t Size;
-	void* Data;
-} CMA_Memory;
-
-typedef struct
-{
-	size_t Size;
+	size_t DataSize;
 	size_t AllocateSize;
-	CMA_Memory* Mem;
+	void* Data;
 } CMA_MemoryZone;
 
-CMA_MemoryZone CMA_Create()
+char ICMA_IsFree(CMA_MemoryZone* Zone, size_t Index)
+{
+	char* j = (char*)Zone->Data + Zone->DataSize + ((Zone->DataSize + 1) * Index);
+	return *j;
+}
+
+void ICMA_SetFree(CMA_MemoryZone* Zone, size_t Index, char Value)
+{
+	char* j = (char*)Zone->Data + Zone->DataSize + ((Zone->DataSize + 1) * Index);
+	memset(j, Value, 1);
+}
+
+CMA_MemoryZone CMA_Create(size_t DataSize)
 {
 	CMA_MemoryZone Zone;
 	Zone.Size = 0;
-	Zone.AllocateSize = CMA_BLOCK_SIZE;
-	Zone.Mem = (CMA_Memory*)calloc(CMA_BLOCK_SIZE, sizeof(CMA_Memory));
+	Zone.DataSize = DataSize;
+	Zone.AllocateSize = CMA_ZONE_SIZE;
+	Zone.Data = calloc(DataSize + 1, CMA_ZONE_SIZE);
+	for (size_t i = 0; i < CMA_ZONE_SIZE; i++)
+		ICMA_SetFree(&Zone, i, 1);
+
 	return Zone;
 }
 
 void CMA_Destroy(CMA_MemoryZone* Zone)
 {
+	free(Zone->Data);
+}
+
+size_t CMA_Push(CMA_MemoryZone* Zone, void* Data)
+{
+	if (Zone->Size >= Zone->AllocateSize)
+	{
+		Zone->AllocateSize += CMA_ZONE_SIZE;
+		Zone->Data = realloc(Zone->Data, (Zone->DataSize + 1) * Zone->AllocateSize);
+
+		for (size_t i = Zone->AllocateSize - CMA_ZONE_SIZE; i < Zone->AllocateSize; i++)
+			ICMA_SetFree(Zone, i, 1);
+	}
+
+	size_t Index = Zone->Size;
+
 	for (size_t i = 0; i < Zone->Size; i++)
 	{
-		free(Zone->Mem[i].Data);
-		Zone->Mem[i].Data = NULL;
-		Zone->Mem[i].Size = 0;
-	}
-	free(Zone->Mem);
-	Zone->Mem = NULL;
-	Zone->Size = 0;
-	Zone->AllocateSize = 0;
-}
-
-size_t CMA_Push(CMA_MemoryZone* Mem, size_t Size, void* Data)
-{
-	if (Mem->Size >= Mem->AllocateSize)
-	{
-		Mem->Mem = (CMA_Memory*)realloc(Mem->Mem, (Mem->AllocateSize + CMA_BLOCK_SIZE) * sizeof(CMA_Memory));
-		Mem->AllocateSize += CMA_BLOCK_SIZE;
-	}
-
-
-	for (size_t i = 0; i < Mem->Size; i++)
-	{
-		if (Mem->Mem[i].Data == NULL && Mem->Mem[i].Size == 0)
+		if (ICMA_IsFree(Zone, i))
 		{
-			Mem->Mem[i].Size = Size;
-			Mem->Mem[i].Data = malloc(Size);
-			memcpy(Mem->Mem[i].Data, Data, Size);
-			return i;
+			Index = i;
+			break;
 		}
 	}
-	Mem->Mem[Mem->Size].Data = malloc(Size);
-	memcpy(Mem->Mem[Mem->Size].Data, Data, Size);
 
-	Mem->Size++;
-	return Mem->Size - 1;
+	char* TempData = (char*)Zone->Data + ((Zone->DataSize + 1) * Index);
+	memcpy(TempData, Data, Zone->DataSize);
+	ICMA_SetFree(Zone, Index, 0);
+
+	Zone->Size++;
+	return Zone->Size - 1;
 }
 
-size_t CMA_GetSize(CMA_MemoryZone* Mem)
+void* CMA_GetAt(CMA_MemoryZone* Zone, size_t Index)
 {
-	if (Mem->Mem != NULL)
-		return Mem->Size;
-
-	return 0;
+	char* TempData = (char*)Zone->Data + ((Zone->DataSize + 1) * Index);
+	if (ICMA_IsFree(Zone, Index))
+		TempData = NULL;
+	return TempData;
 }
 
-void* CMA_GetAt(CMA_MemoryZone* Mem, size_t Index)
+void CMA_Pop(CMA_MemoryZone* Zone, size_t Index)
 {
-	if (Mem->Mem != NULL && Index <= Mem->Size)//Size - 1?
-		return Mem->Mem[Index].Data;
+	char* TempData = (char*)Zone->Data + ((Zone->DataSize + 1) * Index);
+	memset(TempData, 0, Zone->DataSize);
+	ICMA_SetFree(Zone, Index, 1);
 
-	return NULL;
-}
-
-void CMA_Pop(CMA_MemoryZone* Mem, size_t Index)
-{
-	free(Mem->Mem[Index].Data);
-	Mem->Mem[Index].Data = NULL;
-	Mem->Mem[Index].Size = 0;
-
-	for (uint32_t i = CMA_GetSize(Mem) - 1; i > 0; i--)
+	for (uint32_t i = Zone->Size - 1; i > 0; i--)
 	{
-		if (Mem->Mem[i].Data != NULL)
+		if (!ICMA_IsFree(Zone, i))
 			break;
 
-		free(Mem->Mem[i].Data);
-		Mem->Mem[i].Data = NULL;
-		Mem->Mem[i].Size = 0;
-		Mem->Size--;
+		ICMA_SetFree(Zone, i, 1);
+		Zone->Size--;
 	}
 }

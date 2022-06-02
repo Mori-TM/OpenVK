@@ -101,9 +101,9 @@ uint32_t VkCreateRenderer(OpenVkBool EnableValidationLayers, const char**(*GetEx
 	const char* DeviceExtensions[] = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
 	
 	memset(&VkRenderer, 0, sizeof(VkRendererInfo));
-	VkRenderer.DescriptorSets = CMA_Create();
-	VkRenderer.TextureImages = CMA_Create();
-	VkRenderer.Buffers = CMA_Create();
+	VkRenderer.DescriptorSets = CMA_Create(sizeof(VkDescriptorSetInfo));
+	VkRenderer.TextureImages = CMA_Create(sizeof(VkTextureImageInfo));
+	VkRenderer.Buffers = CMA_Create(sizeof(VkBufferInfo));
 
 	//Instance
 	VkApplicationInfo AppInfo;
@@ -280,13 +280,13 @@ uint32_t VkCreateColorImageAttachment(uint32_t Width, uint32_t Height, uint32_t 
 
 	if (Sampled)
 	{
-		if (!VkCreateImage(Width, Height, 1, Samples, ColorFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &VkRenderer.Images[VkRenderer.ImageCount], &VkRenderer.ImageMemories[VkRenderer.ImageCount]))
+		if (VkCreateImage(Width, Height, 1, Samples, ColorFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &VkRenderer.Images[VkRenderer.ImageCount], &VkRenderer.ImageMemories[VkRenderer.ImageCount]) == OPENVK_ERROR)
 			return OpenVkRuntimeError("Failed to Create Sampled Attachment Image");
 		VkRenderer.ImageViews[VkRenderer.ImageCount] = VkCreateImageView(VkRenderer.Images[VkRenderer.ImageCount], ColorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
 	}
 	else
 	{
-		if (!VkCreateImage(Width, Height, 1, Samples, ColorFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &VkRenderer.Images[VkRenderer.ImageCount], &VkRenderer.ImageMemories[VkRenderer.ImageCount]))
+		if (VkCreateImage(Width, Height, 1, Samples, ColorFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &VkRenderer.Images[VkRenderer.ImageCount], &VkRenderer.ImageMemories[VkRenderer.ImageCount]) == OPENVK_ERROR)
 			return OpenVkRuntimeError("Failed to Create Msaa Attachment Image");
 		VkRenderer.ImageViews[VkRenderer.ImageCount] = VkCreateImageView(VkRenderer.Images[VkRenderer.ImageCount], ColorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
 	}
@@ -308,13 +308,13 @@ uint32_t VkCreateDepthImageAttachment(uint32_t Width, uint32_t Height, uint32_t 
 
 	if (Sampled)
 	{
-		if (!VkCreateImage(Width, Height, 1, Samples, DepthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &VkRenderer.Images[VkRenderer.ImageCount], &VkRenderer.ImageMemories[VkRenderer.ImageCount]))
+		if (VkCreateImage(Width, Height, 1, Samples, DepthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &VkRenderer.Images[VkRenderer.ImageCount], &VkRenderer.ImageMemories[VkRenderer.ImageCount]) == OPENVK_ERROR)
 			return OpenVkRuntimeError("Failed to Create Depth Sampled Attachment Image");
 		VkRenderer.ImageViews[VkRenderer.ImageCount] = VkCreateImageView(VkRenderer.Images[VkRenderer.ImageCount], DepthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
 	}
 	else
 	{
-		if (!VkCreateImage(Width, Height, 1, Samples, DepthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &VkRenderer.Images[VkRenderer.ImageCount], &VkRenderer.ImageMemories[VkRenderer.ImageCount]))
+		if (VkCreateImage(Width, Height, 1, Samples, DepthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &VkRenderer.Images[VkRenderer.ImageCount], &VkRenderer.ImageMemories[VkRenderer.ImageCount]) == OPENVK_ERROR)
 			return OpenVkRuntimeError("Failed to Create Depth Attachment Image");
 		VkRenderer.ImageViews[VkRenderer.ImageCount] = VkCreateImageView(VkRenderer.Images[VkRenderer.ImageCount], DepthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
 	}	
@@ -1091,7 +1091,7 @@ uint32_t VkCreateDescriptorSet(uint32_t DescriptorSetLayout, OpenVkBool DynamicD
 	if (DescriptorBufferInfos != NULL) OpenVkFree(DescriptorBufferInfos);
 	if (DescriptorImageInfos != NULL) OpenVkFree(DescriptorImageInfos);
 
-	return CMA_Push(&VkRenderer.DescriptorSets, sizeof(VkDescriptorSetInfo), &DescriptorSetInfo);
+	return CMA_Push(&VkRenderer.DescriptorSets, &DescriptorSetInfo);
 }
 
 void VkUpdateDescriptorSet(uint32_t DescriptorSetLayout, OpenVkBool DynamicDescriptorPool, uint32_t DescriptorPool, uint32_t DescriptorCount, uint32_t* DescriptorTypes,
@@ -1297,7 +1297,7 @@ uint32_t VkCreateTextureImage(const char* Path, OpenVkBool FlipVertical)
 	VkBuffer StagingBuffer;
 	VkDeviceMemory StagingBufferMemory;
 
-	if (!VkCreateBuffer(ImageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &StagingBuffer, &StagingBufferMemory))
+	if (VkCreateBuffer(ImageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &StagingBuffer, &StagingBufferMemory) == OPENVK_ERROR)
 		return OpenVkRuntimeError("Failed to create Texture Buffer");
 
 	void* Data;
@@ -1307,7 +1307,7 @@ uint32_t VkCreateTextureImage(const char* Path, OpenVkBool FlipVertical)
 
 	OpenVkFree(Pixel);
 
-	if (!VkCreateImage(TextureWidth, TextureHeight, VkRenderer.MipLevels, VK_SAMPLE_COUNT_1_BIT, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &TextureImage.TextureImage, &TextureImage.TextureImageMemory))
+	if (VkCreateImage(TextureWidth, TextureHeight, VkRenderer.MipLevels, VK_SAMPLE_COUNT_1_BIT, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &TextureImage.TextureImage, &TextureImage.TextureImageMemory) == OPENVK_ERROR)
 		return OpenVkRuntimeError("Failed to create Texture Image");
 
 	VkTransitionImageLayout(TextureImage.TextureImage, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VkRenderer.MipLevels);
@@ -1322,7 +1322,7 @@ uint32_t VkCreateTextureImage(const char* Path, OpenVkBool FlipVertical)
 
 	TextureImage.TextureImageView = VkCreateImageView(TextureImage.TextureImage, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT, VkRenderer.MipLevels);
 
-	return CMA_Push(&VkRenderer.TextureImages, sizeof(VkTextureImageInfo), &TextureImage);
+	return CMA_Push(&VkRenderer.TextureImages, &TextureImage);
 }
 
 void VkDestroyTextureImage(uint32_t TextureImage)
@@ -1388,7 +1388,7 @@ uint32_t VkCreateVertexBuffer(size_t Size, const void* Vertices)
 
 	VkBuffer StagingBuffer;
 	VkDeviceMemory StagingBufferMemory;
-	if (!VkCreateBuffer(Size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &StagingBuffer, &StagingBufferMemory))
+	if (VkCreateBuffer(Size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &StagingBuffer, &StagingBufferMemory) == OPENVK_ERROR)
 		return OpenVkRuntimeError("Failed to Create Vertex Buffer: Func 0");
 
 	void* Data;
@@ -1396,7 +1396,7 @@ uint32_t VkCreateVertexBuffer(size_t Size, const void* Vertices)
 	memcpy(Data, Vertices, Size);
 	vkUnmapMemory(VkRenderer.Device, StagingBufferMemory);
 
-	if (!VkCreateBuffer(Size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &BufferInfo.Buffer, &BufferInfo.BufferMemory))
+	if (VkCreateBuffer(Size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &BufferInfo.Buffer, &BufferInfo.BufferMemory) == OPENVK_ERROR)
 		return OpenVkRuntimeError("Failed to Create Vertex Buffer: Func 1");
 
 	VkCopyBuffer(StagingBuffer, BufferInfo.Buffer, Size);
@@ -1404,7 +1404,7 @@ uint32_t VkCreateVertexBuffer(size_t Size, const void* Vertices)
 	vkDestroyBuffer(VkRenderer.Device, StagingBuffer, NULL);
 	vkFreeMemory(VkRenderer.Device, StagingBufferMemory, NULL);
 
-	return CMA_Push(&VkRenderer.Buffers, sizeof(VkBufferInfo), &BufferInfo);
+	return CMA_Push(&VkRenderer.Buffers, &BufferInfo);
 }
 
 uint32_t VkCreateIndexBuffer(size_t Size, const void* Indices)
@@ -1413,7 +1413,7 @@ uint32_t VkCreateIndexBuffer(size_t Size, const void* Indices)
 	
 	VkBuffer StagingBuffer;
 	VkDeviceMemory StagingBufferMemory;
-	if (!VkCreateBuffer(Size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &StagingBuffer, &StagingBufferMemory))
+	if (VkCreateBuffer(Size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &StagingBuffer, &StagingBufferMemory) == OPENVK_ERROR)
 		return OpenVkRuntimeError("Failed to Create Index Buffer 0");
 
 	void* Data;
@@ -1421,7 +1421,7 @@ uint32_t VkCreateIndexBuffer(size_t Size, const void* Indices)
 	memcpy(Data, Indices, Size);
 	vkUnmapMemory(VkRenderer.Device, StagingBufferMemory);
 
-	if (!VkCreateBuffer(Size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &BufferInfo.Buffer, &BufferInfo.BufferMemory))
+	if (VkCreateBuffer(Size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &BufferInfo.Buffer, &BufferInfo.BufferMemory) == OPENVK_ERROR)
 		return OpenVkRuntimeError("Failed to Create Index Buffer 1");
 
 	VkCopyBuffer(StagingBuffer, BufferInfo.Buffer, Size);
@@ -1429,7 +1429,7 @@ uint32_t VkCreateIndexBuffer(size_t Size, const void* Indices)
 	vkDestroyBuffer(VkRenderer.Device, StagingBuffer, NULL);
 	vkFreeMemory(VkRenderer.Device, StagingBufferMemory, NULL);
 
-	return CMA_Push(&VkRenderer.Buffers, sizeof(VkBufferInfo), &BufferInfo);
+	return CMA_Push(&VkRenderer.Buffers, &BufferInfo);
 }
 
 void VkDestroyBuffer(uint32_t Buffer)
@@ -1451,7 +1451,7 @@ uint32_t VkCreateUniformBuffer(size_t Size)
 	VkRenderer.UniformBuffers = (VkUniformBufferInfo*)OpenVkRealloc(VkRenderer.UniformBuffers, (VkRenderer.UniformBufferCount + 1) * sizeof(VkUniformBufferInfo));
 
 	for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
-		if (!VkCreateBuffer(Size, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &VkRenderer.UniformBuffers[VkRenderer.UniformBufferCount].Buffers[i], &VkRenderer.UniformBuffers[VkRenderer.UniformBufferCount].BufferMemories[i]))
+		if (VkCreateBuffer(Size, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &VkRenderer.UniformBuffers[VkRenderer.UniformBufferCount].Buffers[i], &VkRenderer.UniformBuffers[VkRenderer.UniformBufferCount].BufferMemories[i]) == OPENVK_ERROR)
 			return OpenVkRuntimeError("Failed To Create Uniform Buffer");
 
 	VkRenderer.UniformBufferCount++;
@@ -1466,7 +1466,7 @@ uint32_t VkCreateDynamicUniformBuffer(size_t Size)
 	VkRenderer.Buffers = (VkBuffer*)OpenVkRealloc(VkRenderer.Buffers, (VkRenderer.BufferCount + 1) * sizeof(VkBuffer));
 	VkRenderer.BufferMemories = (VkDeviceMemory*)OpenVkRealloc(VkRenderer.BufferMemories, (VkRenderer.BufferCount + 1) * sizeof(VkDeviceMemory));
 
-	if (!VkCreateBuffer(Size, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, &VkRenderer.Buffers[VkRenderer.BufferCount], &VkRenderer.BufferMemories[VkRenderer.BufferCount]))
+	if (VkCreateBuffer(Size, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, &VkRenderer.Buffers[VkRenderer.BufferCount], &VkRenderer.BufferMemories[VkRenderer.BufferCount]) == OPENVK_ERROR)
 		return OpenVkRuntimeError("Failed To Create Dynamic Uniform Buffer");
 
 	VkRenderer.BufferCount++;
@@ -1637,7 +1637,7 @@ void VkRecreateSwapChain(uint32_t* Width, uint32_t* Height)
 	VkRenderer.StaticDescriptorPools.DescriptorPoolCount = 0;
 
 	CMA_Destroy(&VkRenderer.DescriptorSets);
-	VkRenderer.DescriptorSets = CMA_Create();
+	VkRenderer.DescriptorSets = CMA_Create(sizeof(VkDescriptorSetInfo));
 
 	VkCreateSwapChain(Width, Height);
 	VkCreateCommandBuffers();
@@ -1677,7 +1677,7 @@ void VkDestroyRenderer()
 	if (VkRenderer.SamplerCount > 0)
 		OpenVkFree(VkRenderer.Sampler);
 
-	for (uint32_t i = 0; i < CMA_GetSize(&VkRenderer.TextureImages); i++)
+	for (uint32_t i = 0; i < VkRenderer.TextureImages.Size; i++)
 	{
 		VkTextureImageInfo* TextureImage = (VkTextureImageInfo*)CMA_GetAt(&VkRenderer.TextureImages, i);
 		if (TextureImage != NULL)
@@ -1697,7 +1697,7 @@ void VkDestroyRenderer()
 
 //	OpenVkFree(VkRenderer.DescriptorSetLayouts);
 
-	for (uint32_t i = 0; i < CMA_GetSize(&VkRenderer.Buffers); i++)
+	for (uint32_t i = 0; i < VkRenderer.Buffers.Size; i++)
 	{
 		VkBufferInfo* BufferInfo = (VkBufferInfo*)CMA_GetAt(&VkRenderer.Buffers, i);
 		if (BufferInfo != NULL)
