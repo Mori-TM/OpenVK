@@ -125,7 +125,7 @@ void CMA_Pop(CMA_MemoryZone* Zone, size_t Index)
 {
 	Zone->Mem[Index].State = ICMA_DATA_STATE_UNUSED | ICMA_DATA_STATE_ALLOCATED;
 
-	for (uint32_t i = Zone->Size - 1; i > 0; i--)
+	for (size_t i = Zone->Size - 1; i > 0; i--)
 	{
 		if (Zone->Mem[i].State & ICMA_DATA_STATE_USED)
 			break;
