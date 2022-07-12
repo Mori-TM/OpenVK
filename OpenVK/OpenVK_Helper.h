@@ -1,6 +1,6 @@
 static void (*GetWindowSizeFunc)(uint32_t* Width, uint32_t* Height) = NULL;
 
-#define OpenVkBool uint32_t
+typedef uint32_t OpenVkBool;
 #define OpenVkTrue 1
 #define OpenVkFalse 0
 
