@@ -8,6 +8,14 @@ typedef uint32_t OpenVkBool;
 
 typedef enum
 {
+	OPENVK_VULKAN = 0x1,
+	OPENVK_DIRECTX_12 = 0x2,
+	OPENVK_RAYTRACING = 0x4,
+	OPENVK_VALIDATION_LAYER = 0x8,
+} OpenVkRendererFlags;
+
+typedef enum
+{
 	OPENVK_PRIMITIVE_TOPOLOGY_POINT = 0x0,
 	OPENVK_PRIMITIVE_TOPOLOGY_LINE = 0x1,
 	OPENVK_PRIMITIVE_TOPOLOGY_TRIANGLE = 0x2,
@@ -38,6 +46,9 @@ typedef enum
 {
 	OPENVK_SHADER_TYPE_VERTEX = 0x0,
 	OPENVK_SHADER_TYPE_FRAGMENT = 0x1,
+	OPENVK_SHADER_TYPE_RAYGEN = 0x2,
+	OPENVK_SHADER_TYPE_MISS = 0x3,
+	OPENVK_SHADER_TYPE_CLOSEST_HIT = 0x4,
 } OpenVkShaderType;
 
 typedef enum
@@ -45,6 +56,8 @@ typedef enum
 	OPENVK_DESCRIPTOR_TYPE_UNIFORM_BUFFER = 0x0,
 	OPENVK_DESCRIPTOR_TYPE_DYNAMIC_UNIFORM_BUFFER = 0x1,
 	OPENVK_DESCRIPTOR_TYPE_IMAGE_SAMPLER = 0x2,
+	OPENVK_DESCRIPTOR_TYPE_STORAGE_IMAGE = 0x3,
+	OPENVK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE = 0x4,
 } OpenVkDescriptorType;
 
 typedef enum
@@ -82,6 +95,16 @@ typedef struct
 
 typedef struct
 {
+	uint32_t		PushConstantCount;
+	uint32_t*		PushConstantShaderTypes;
+	uint32_t*		PushConstantOffsets;
+	uint32_t*		PushConstantSizes;
+	uint32_t		DescriptorSetLayoutCount;
+	uint32_t*		DescriptorSetLayouts;
+} OpenVkPipelineLayoutCreateInfo;
+
+typedef struct
+{
 	const char*		VertexPath;
 	const char*		FragmentPath;
 	size_t			BindingStride;
@@ -93,6 +116,7 @@ typedef struct
 	uint32_t		y;
 	uint32_t		Width;
 	uint32_t		Height;
+	OpenVkBool		DepthClamp;
 	uint32_t		PolygonMode;
 	float			LineWidth;
 	uint32_t		CullMode;
@@ -100,12 +124,6 @@ typedef struct
 	uint32_t		MsaaSamples;
 	OpenVkBool		AlphaBlending;
 	uint32_t		ColorBlendAttachments;
-	uint32_t		PushConstantCount;
-	uint32_t*		PushConstantShaderTypes;
-	uint32_t*		PushConstantOffsets;
-	uint32_t*		PushConstantSizes;
-	uint32_t		DescriptorSetLayoutCount;
-	uint32_t*		DescriptorSetLayouts;
 	OpenVkBool		DepthStencil;
 	uint32_t		RenderPass;
 } OpenVkGraphicsPipelineCreateInfo;
@@ -173,7 +191,7 @@ void* OpenVkRealloc(void* Data, size_t Size)
 {
 	void* Mem = realloc(Data, Size);
 	if (Mem == NULL)
-		OpenVkRuntimeError("Failed to allcoate Memory!");
+		OpenVkRuntimeError("Failed to reallcoate Memory!");
 
 	return Mem;
 }
@@ -181,10 +199,7 @@ void* OpenVkRealloc(void* Data, size_t Size)
 void OpenVkFree(void* Data)
 {
 	if (Data != NULL)
-	{
-		free(Data);
-		Data = NULL;
-	}		
+		free(Data);	
 	else
 		OpenVkRuntimeError("No Memory to free!");
 }
@@ -209,4 +224,9 @@ char* OpenVkReadFileData(const char* Path, size_t* Size)
 
 	*Size = Length;
 	return Buffer;
+}
+
+uint32_t OpenVkAlignedSize(uint32_t Value, uint32_t Alignment)
+{
+	return (Value + Alignment - 1) & ~(Alignment - 1);
 }

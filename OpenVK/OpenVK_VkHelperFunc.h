@@ -37,6 +37,9 @@ typedef struct
 
 typedef struct
 {
+	uint32_t DeviceExtensionCount;
+	const char* DeviceExtensions[32];
+
 	VkInstance Instance;
 	VkPhysicalDevice PhysicalDevice;
 	VkDevice Device;
@@ -61,8 +64,10 @@ typedef struct
 	uint32_t RenderPassCount;
 	VkRenderPass* RenderPasses;
 
-	uint32_t PipelineCount;
+	uint32_t PipelineLayoutCount;
 	VkPipelineLayout* PipelineLayouts;
+
+	uint32_t PipelineCount;
 	VkPipeline* Pipelines;
 
 	uint32_t FramebufferCount;
@@ -101,8 +106,9 @@ typedef struct
 //	VkDeviceMemory* TextureImageMemories;
 	CMA_MemoryZone TextureImages;
 
-	uint32_t SamplerCount;
-	VkSampler* Sampler;
+//	uint32_t SamplerCount;
+//	VkSampler* Sampler;
+	CMA_MemoryZone Sampler;
 
 	VkSampleCountFlagBits MsaaSamples;
 
@@ -132,8 +138,6 @@ VkRendererInfo VkRenderer = { NULL };
 
 OpenVkBool VkIsPhysicalDeviceSuitable(VkPhysicalDevice PhysicalDevice)
 {
-	VkPhysicalDeviceProperties DeviceProperties;
-	VkPhysicalDeviceFeatures DeviceFeatures;
 	vkGetPhysicalDeviceProperties(PhysicalDevice, &VkRenderer.PhysicalDeviceProperties);
 	vkGetPhysicalDeviceFeatures(PhysicalDevice, &VkRenderer.PhysicalDeviceFeatures);
 
@@ -204,11 +208,11 @@ VkSurfaceFormatKHR VkChooseSwapSurfaceFormat(VkSurfaceFormatKHR* AvailableFormat
 VkPresentModeKHR VkChooseSwapPresentMode(VkPresentModeKHR* AvailablePresentModes, uint32_t PresentCount)
 {
 	/*Present Modes(see officale programming guide for vulkan p.146)
-	VK_PRESENT_MODE_MAILBOX_KHR: Presents Image as soon as possible,
+	VK_PRESENT_MODE_IMMEDIATE_KHR: Presents Image as soon as possible,
 								 it provides the highest Framerate
 	VK_PRESENT_MODE_MAILBOX_KHR: Probably waits for v-sync
 	VK_PRESENT_MODE_FIFO_KHR: Images saved in queue usually wait for
-							  v-sync before show on screen
+							  v-sync before shown on screen
 	*/
 	for (uint32_t i = 0; i < PresentCount; i++)
 		if (AvailablePresentModes[i] == VK_PRESENT_MODE_MAILBOX_KHR)
@@ -299,37 +303,6 @@ uint32_t VkFindMemoryType(uint32_t TypeFilter, VkMemoryPropertyFlags Properties)
 
 	return OpenVkRuntimeError("Failed To find a Suitable Memory Type");
 }
-OpenVkBool VkCreateBuffer(VkDeviceSize Size, VkBufferUsageFlags Usage, VkMemoryPropertyFlags Properties, VkBuffer* Buffer, VkDeviceMemory* BufferMemory)
-{
-	VkBufferCreateInfo BufferInfo;
-	BufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-	BufferInfo.pNext = NULL;
-	BufferInfo.flags = 0;
-	BufferInfo.size = Size;
-	BufferInfo.usage = Usage;
-	BufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-	BufferInfo.queueFamilyIndexCount = 0;
-	BufferInfo.pQueueFamilyIndices = NULL;
-
-	if (vkCreateBuffer(VkRenderer.Device, &BufferInfo, NULL, Buffer) != VK_SUCCESS)
-		return OpenVkRuntimeError("Failed to Create Buffer");
-
-	VkMemoryRequirements MemoryRequirements;
-	vkGetBufferMemoryRequirements(VkRenderer.Device, *Buffer, &MemoryRequirements);
-
-	VkMemoryAllocateInfo AllocateInfo;
-	AllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-	AllocateInfo.pNext = NULL;
-	AllocateInfo.allocationSize = MemoryRequirements.size;
-	AllocateInfo.memoryTypeIndex = VkFindMemoryType(MemoryRequirements.memoryTypeBits, Properties);
-
-	if (vkAllocateMemory(VkRenderer.Device, &AllocateInfo, NULL, BufferMemory) != VK_SUCCESS)
-		return OpenVkRuntimeError("Failed to Allocate Buffer Memory");
-
-	vkBindBufferMemory(VkRenderer.Device, *Buffer, *BufferMemory, 0);
-
-	return 1;
-}
 
 VkCommandBuffer VkBeginSingleTimeCommands()
 {
@@ -369,8 +342,17 @@ void VkEndSingleTimeCommandBuffer(VkCommandBuffer CommandBuffer)
 	SubmitInfo.signalSemaphoreCount = 0;
 	SubmitInfo.pSignalSemaphores = NULL;
 
-	vkQueueSubmit(VkRenderer.GraphicsQueue, 1, &SubmitInfo, VK_NULL_HANDLE);
-	vkQueueWaitIdle(VkRenderer.GraphicsQueue);
+	VkFenceCreateInfo FenceCreateInfo;
+	FenceCreateInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+	FenceCreateInfo.pNext = NULL;
+	FenceCreateInfo.flags = 0;
+	VkFence Fence;
+	vkCreateFence(VkRenderer.Device, &FenceCreateInfo, NULL, &Fence);
+
+	vkQueueSubmit(VkRenderer.GraphicsQueue, 1, &SubmitInfo, Fence);
+//	vkQueueWaitIdle(VkRenderer.GraphicsQueue);
+	vkWaitForFences(VkRenderer.Device, 1, &Fence, VK_TRUE, UINT64_MAX);
+	vkDestroyFence(VkRenderer.Device, Fence, NULL);
 
 	vkFreeCommandBuffers(VkRenderer.Device, VkRenderer.CommandPool, 1, &CommandBuffer);
 }
@@ -387,6 +369,86 @@ void VkCopyBuffer(VkBuffer SrcBuffer, VkBuffer DstBuffer, VkDeviceSize Size)
 	vkCmdCopyBuffer(CommandBuffer, SrcBuffer, DstBuffer, 1, &CopyRegion);
 
 	VkEndSingleTimeCommandBuffer(CommandBuffer);
+}
+
+OpenVkBool VkCreateBuffer(VkDeviceSize Size, VkBufferUsageFlags Usage, VkMemoryPropertyFlags Properties, VkBuffer* Buffer, VkDeviceMemory* BufferMemory)
+{
+	VkBufferCreateInfo BufferInfo;
+	BufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+	BufferInfo.pNext = NULL;
+	BufferInfo.flags = 0;
+	BufferInfo.size = Size;
+	BufferInfo.usage = Usage;
+	BufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+	BufferInfo.queueFamilyIndexCount = 0;
+	BufferInfo.pQueueFamilyIndices = NULL;
+
+	if (vkCreateBuffer(VkRenderer.Device, &BufferInfo, NULL, Buffer) != VK_SUCCESS)
+		return OpenVkRuntimeError("Failed to Create Buffer");
+
+	VkMemoryRequirements MemoryRequirements;
+	vkGetBufferMemoryRequirements(VkRenderer.Device, *Buffer, &MemoryRequirements);
+
+	VkMemoryAllocateInfo AllocateInfo;
+	AllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+	AllocateInfo.pNext = NULL;
+	AllocateInfo.allocationSize = MemoryRequirements.size;
+	AllocateInfo.memoryTypeIndex = VkFindMemoryType(MemoryRequirements.memoryTypeBits, Properties);
+
+	VkMemoryAllocateFlagsInfoKHR AllocateFlagsInfo;
+	if (Usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT) 
+	{
+		AllocateFlagsInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO_KHR;
+		AllocateFlagsInfo.pNext = NULL;
+		AllocateFlagsInfo.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT_KHR;		
+		AllocateFlagsInfo.deviceMask = 0;
+		AllocateInfo.pNext = &AllocateFlagsInfo;
+	}
+
+	if (vkAllocateMemory(VkRenderer.Device, &AllocateInfo, NULL, BufferMemory) != VK_SUCCESS)
+		return OpenVkRuntimeError("Failed to Allocate Buffer Memory");
+
+	vkBindBufferMemory(VkRenderer.Device, *Buffer, *BufferMemory, 0);
+
+	return 1;
+}
+
+uint32_t VkCreateBufferExt(VkBufferUsageFlags SrcUsage, VkMemoryPropertyFlags SrcProperties, VkBufferUsageFlags DstUsage, VkMemoryPropertyFlags DstProperties, size_t Size, const void* InData)
+{
+	VkBufferInfo BufferInfo;
+
+	VkBuffer StagingBuffer;
+	VkDeviceMemory StagingBufferMemory;
+	if (VkCreateBuffer(Size, SrcUsage, SrcProperties, &StagingBuffer, &StagingBufferMemory) == OPENVK_ERROR)
+		return OpenVkRuntimeError("Failed to Create Buffer: Func 0");
+
+	void* Data;
+	vkMapMemory(VkRenderer.Device, StagingBufferMemory, 0, Size, 0, &Data);
+	memcpy(Data, InData, Size);
+	vkUnmapMemory(VkRenderer.Device, StagingBufferMemory);
+
+	if (VkCreateBuffer(Size, DstUsage, DstProperties, &BufferInfo.Buffer, &BufferInfo.BufferMemory) == OPENVK_ERROR)
+		return OpenVkRuntimeError("Failed to Create Buffer: Func 1");
+
+	VkCopyBuffer(StagingBuffer, BufferInfo.Buffer, Size);
+
+	vkDestroyBuffer(VkRenderer.Device, StagingBuffer, NULL);
+	vkFreeMemory(VkRenderer.Device, StagingBufferMemory, NULL);
+
+	return CMA_Push(&VkRenderer.Buffers, &BufferInfo);
+}
+
+void VkDestroyBuffer(uint32_t Buffer)
+{
+	vkDeviceWaitIdle(VkRenderer.Device);
+
+	VkBufferInfo* BufferInfo = (VkBufferInfo*)CMA_GetAt(&VkRenderer.Buffers, Buffer);
+	if (BufferInfo != NULL)
+	{
+		vkDestroyBuffer(VkRenderer.Device, BufferInfo->Buffer, NULL);
+		vkFreeMemory(VkRenderer.Device, BufferInfo->BufferMemory, NULL);
+		CMA_Pop(&VkRenderer.Buffers, Buffer);
+	}
 }
 
 OpenVkBool VkCreateImage(uint32_t Width, uint32_t Height, uint32_t MipLevels, VkSampleCountFlagBits NumSamples, VkFormat Format, VkImageTiling Tiling, VkImageUsageFlags Usage, VkMemoryPropertyFlags Properties, VkImage* Image, VkDeviceMemory* ImageMemory)
@@ -626,8 +688,8 @@ void VkGenerateMipmaps(VkImage Image, VkFormat ImageFormat, int32_t TextureWidth
 		Blit.dstOffsets[0].x = 0;
 		Blit.dstOffsets[0].y = 0;
 		Blit.dstOffsets[0].z = 0;
-		Blit.dstOffsets[1].x = MipWidth > 1 ? MipWidth * 0.5 : 1;
-		Blit.dstOffsets[1].y = MipHeight > 1 ? MipHeight * 0.5 : 1;
+		Blit.dstOffsets[1].x = MipWidth > 1 ? MipWidth / 2 : 1;
+		Blit.dstOffsets[1].y = MipHeight > 1 ? MipHeight / 2 : 1;
 		Blit.dstOffsets[1].z = 1;
 
 		vkCmdBlitImage(CommandBuffer, Image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, Image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &Blit, VK_FILTER_LINEAR);
