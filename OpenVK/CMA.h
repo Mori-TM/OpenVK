@@ -110,8 +110,8 @@ size_t CMA_Push(CMA_MemoryZone* Zone, void* Data)
 		memcpy(Zone->Mem[Zone->Size].Data, Data, Zone->MemSize);
 	}
 
-	Zone->Size++;
-	return Zone->Size - 1;
+	//changed
+	return Zone->Size++;
 }
 
 size_t CMA_GetSize(CMA_MemoryZone* Zone)

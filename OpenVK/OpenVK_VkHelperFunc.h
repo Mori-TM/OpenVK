@@ -24,10 +24,11 @@ typedef struct
 
 typedef struct
 {
-	VkImage TextureImage;
-	VkImageView TextureImageView;
-	VkDeviceMemory TextureImageMemory;
-} VkTextureImageInfo;
+	VkFormat Format;
+	VkImage Image;
+	VkImageView ImageView;
+	VkDeviceMemory ImageMemory;
+} VkImageInfo;
 
 typedef struct
 {
@@ -56,10 +57,11 @@ typedef struct
 	VkImage* SwapChainImages;
 	VkImageView* SwapChainImageViews;
 
-	uint32_t ImageCount;
-	VkImage* Images;
-	VkDeviceMemory* ImageMemories;
-	VkImageView* ImageViews;
+//	uint32_t ImageCount;
+//	VkImage* Images;
+//	VkDeviceMemory* ImageMemories;
+//	VkImageView* ImageViews;
+	CMA_MemoryZone ImageAttachments;
 
 	uint32_t RenderPassCount;
 	VkRenderPass* RenderPasses;
@@ -104,7 +106,7 @@ typedef struct
 //	VkImage* TextureImages;
 //	VkImageView* TextureImageViews;
 //	VkDeviceMemory* TextureImageMemories;
-	CMA_MemoryZone TextureImages;
+	CMA_MemoryZone Images;
 
 //	uint32_t SamplerCount;
 //	VkSampler* Sampler;
@@ -422,10 +424,13 @@ uint32_t VkCreateBufferExt(VkBufferUsageFlags SrcUsage, VkMemoryPropertyFlags Sr
 	if (VkCreateBuffer(Size, SrcUsage, SrcProperties, &StagingBuffer, &StagingBufferMemory) == OPENVK_ERROR)
 		return OpenVkRuntimeError("Failed to Create Buffer: Func 0");
 
-	void* Data;
-	vkMapMemory(VkRenderer.Device, StagingBufferMemory, 0, Size, 0, &Data);
-	memcpy(Data, InData, Size);
-	vkUnmapMemory(VkRenderer.Device, StagingBufferMemory);
+	if (InData != NULL)
+	{
+		void* Data;
+		vkMapMemory(VkRenderer.Device, StagingBufferMemory, 0, Size, 0, &Data);
+		memcpy(Data, InData, Size);
+		vkUnmapMemory(VkRenderer.Device, StagingBufferMemory);
+	}	
 
 	if (VkCreateBuffer(Size, DstUsage, DstProperties, &BufferInfo.Buffer, &BufferInfo.BufferMemory) == OPENVK_ERROR)
 		return OpenVkRuntimeError("Failed to Create Buffer: Func 1");

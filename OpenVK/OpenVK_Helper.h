@@ -64,6 +64,7 @@ typedef enum
 {
 	OPENVK_IMAGE_LAYOUT_COLOR_OUTPUT = 0x0,
 	OPENVK_IMAGE_LAYOUT_DEPTH_OUTPUT = 0x1,
+	OPENVK_IMAGE_LAYOUT_GENERAL_OUTPUT = 0x2,
 } OpenVkImageLayout;
 
 typedef enum
@@ -85,6 +86,7 @@ typedef enum
 {
 	OPENVK_IMAGE_TYPE_TEXTURE = 0x0,
 	OPENVK_IMAGE_TYPE_ATTACHMENT = 0x1,
+	OPENVK_IMAGE_TYPE_STORAGE = 0x2,
 } OpenVkImageTypes;
 
 typedef struct

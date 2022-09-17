@@ -45,6 +45,9 @@ typedef struct
 
 	uint32_t ShaderGroupCount;
 	VkRayTracingShaderGroupCreateInfoKHR* ShaderGroups;
+
+	uint32_t ShaderBindingCount;
+	uint32_t* ShaderBindings;
 } VkRaytracerInfo;
 
 VkRaytracerInfo VkRaytracer;
@@ -601,4 +604,33 @@ uint32_t VkCreateRaytracingPipeline(uint32_t PipelineLayout, uint32_t ShaderCoun
 	OpenVkFree(ShaderStages);
 
 	return VkRenderer.PipelineCount++;
+}
+
+uint32_t* VkCreateShaderBindingTable(uint32_t Pipeline, uint32_t ShaderCount)
+{
+	VkRaytracer.ShaderBindings = (uint32_t*)OpenVkRealloc(VkRaytracer.ShaderBindings, (VkRaytracer.ShaderBindingCount + ShaderCount) * sizeof(uint32_t));
+
+	const uint32_t HandleSize = VkRaytracer.RayTracingPipelineProperties.shaderGroupHandleSize;
+	const uint32_t HandleSizeAligned = OpenVkAlignedSize(VkRaytracer.RayTracingPipelineProperties.shaderGroupHandleSize, VkRaytracer.RayTracingPipelineProperties.shaderGroupHandleAlignment);
+	const uint32_t GroupCount = VkRaytracer.ShaderGroupCount;
+	const uint32_t SbtSize = GroupCount * HandleSizeAligned;
+
+	uint8_t* ShaderHandleStorage = (uint8_t*)OpenVkMalloc(SbtSize);
+	if (KHR.vkGetRayTracingShaderGroupHandles(VkRenderer.Device, VkRenderer.Pipelines[Pipeline], 0, GroupCount, SbtSize, ShaderHandleStorage) != VK_SUCCESS)
+	{
+		OpenVkRuntimeError("Failed to get ray tracing shader group handles");
+		return NULL;
+	}
+		
+
+	for (uint32_t i = 0; i < ShaderCount; i++)
+	{
+		VkRaytracer.ShaderBindings[VkRaytracer.ShaderBindingCount] = VkCreateBufferExt(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+			VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+			HandleSize, ShaderHandleStorage + (HandleSizeAligned * i));
+
+		VkRaytracer.ShaderBindingCount++;
+	}
+
+	return VkRaytracer.ShaderBindings + (VkRaytracer.ShaderBindingCount - ShaderCount);
 }

@@ -101,8 +101,9 @@ uint32_t VkCreateRenderer(uint32_t RendererFlags, const char**(*GetExtensions)(u
 //	const char* DeviceExtensions[] = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
 	
 	memset(&VkRenderer, 0, sizeof(VkRendererInfo));
+	VkRenderer.ImageAttachments = CMA_Create(sizeof(VkImageInfo));
 	VkRenderer.DescriptorSets = CMA_Create(sizeof(VkDescriptorSetInfo));
-	VkRenderer.TextureImages = CMA_Create(sizeof(VkTextureImageInfo));
+	VkRenderer.Images = CMA_Create(sizeof(VkImageInfo));
 	VkRenderer.Sampler = CMA_Create(sizeof(VkSampler));
 	VkRenderer.Buffers = CMA_Create(sizeof(VkBufferInfo));
 
@@ -274,64 +275,73 @@ uint32_t VkCreateRenderer(uint32_t RendererFlags, const char**(*GetExtensions)(u
 	if (RendererFlags & OPENVK_RAYTRACING)
 		VkGetRaytracingInfos();
 
-	VkRenderer.ImageCount = 1;
-	return VkRenderer.ImageCount - 1;
+	//We push one dummy image attachment so when we get index 0 in create framebuffer we know the swap chain is ment
+	VkImageInfo Dummy;
+	memset(&Dummy, 1, sizeof(VkImageInfo));
+	return CMA_Push(&VkRenderer.ImageAttachments, &Dummy);
 }
 
 uint32_t VkCreateColorImageAttachment(uint32_t Width, uint32_t Height, uint32_t MsaaSamples, OpenVkBool Sampled)
 {
 	VkFormat ColorFormat = VkRenderer.SwapChainImageFormat;
 
-	VkRenderer.Images = (VkImage*)OpenVkRealloc(VkRenderer.Images, (VkRenderer.ImageCount + 1) * sizeof(VkImage));
-	VkRenderer.ImageMemories = (VkDeviceMemory*)OpenVkRealloc(VkRenderer.ImageMemories, (VkRenderer.ImageCount + 1) * sizeof(VkDeviceMemory));
-	VkRenderer.ImageViews = (VkImageView*)OpenVkRealloc(VkRenderer.ImageViews, (VkRenderer.ImageCount + 1) * sizeof(VkImageView));
+//	VkRenderer.Images = (VkImage*)OpenVkRealloc(VkRenderer.Images, (VkRenderer.ImageCount + 1) * sizeof(VkImage));
+//	VkRenderer.ImageMemories = (VkDeviceMemory*)OpenVkRealloc(VkRenderer.ImageMemories, (VkRenderer.ImageCount + 1) * sizeof(VkDeviceMemory));
+//	VkRenderer.ImageViews = (VkImageView*)OpenVkRealloc(VkRenderer.ImageViews, (VkRenderer.ImageCount + 1) * sizeof(VkImageView));
 
 	VkSampleCountFlagBits Samples = (VkSampleCountFlagBits)(VkRenderer.MsaaSamples < MsaaSamples ? VkRenderer.MsaaSamples : MsaaSamples);
+	VkImageInfo Image;
+	Image.Format = ColorFormat;
 
 	if (Sampled)
 	{
-		if (VkCreateImage(Width, Height, 1, Samples, ColorFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &VkRenderer.Images[VkRenderer.ImageCount], &VkRenderer.ImageMemories[VkRenderer.ImageCount]) == OPENVK_ERROR)
+		if (VkCreateImage(Width, Height, 1, Samples, ColorFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &Image.Image, &Image.ImageMemory) == OPENVK_ERROR)
 			return OpenVkRuntimeError("Failed to Create Sampled Attachment Image");
-		VkRenderer.ImageViews[VkRenderer.ImageCount] = VkCreateImageView(VkRenderer.Images[VkRenderer.ImageCount], ColorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
+		Image.ImageView = VkCreateImageView(Image.Image, ColorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
 	}
 	else
 	{
-		if (VkCreateImage(Width, Height, 1, Samples, ColorFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &VkRenderer.Images[VkRenderer.ImageCount], &VkRenderer.ImageMemories[VkRenderer.ImageCount]) == OPENVK_ERROR)
+		if (VkCreateImage(Width, Height, 1, Samples, ColorFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &Image.Image, &Image.ImageMemory) == OPENVK_ERROR)
 			return OpenVkRuntimeError("Failed to Create Msaa Attachment Image");
-		VkRenderer.ImageViews[VkRenderer.ImageCount] = VkCreateImageView(VkRenderer.Images[VkRenderer.ImageCount], ColorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
+		Image.ImageView = VkCreateImageView(Image.Image, ColorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
 	}
 
-	VkRenderer.ImageCount++;
+	return CMA_Push(&VkRenderer.ImageAttachments, &Image);
+//	VkRenderer.ImageCount++;
 
-	return VkRenderer.ImageCount - 1;
+//	return VkRenderer.ImageCount - 1;
 }
 
 uint32_t VkCreateDepthImageAttachment(uint32_t Width, uint32_t Height, uint32_t MsaaSamples, OpenVkBool Sampled)
 {
 	VkFormat DepthFormat = VkFindDepthFormat();
 
-	VkRenderer.Images = (VkImage*)OpenVkRealloc(VkRenderer.Images, (VkRenderer.ImageCount + 1) * sizeof(VkImage));
-	VkRenderer.ImageMemories = (VkDeviceMemory*)OpenVkRealloc(VkRenderer.ImageMemories, (VkRenderer.ImageCount + 1) * sizeof(VkDeviceMemory));
-	VkRenderer.ImageViews = (VkImageView*)OpenVkRealloc(VkRenderer.ImageViews, (VkRenderer.ImageCount + 1) * sizeof(VkImageView));
+//	VkRenderer.Images = (VkImage*)OpenVkRealloc(VkRenderer.Images, (VkRenderer.ImageCount + 1) * sizeof(VkImage));
+//	VkRenderer.ImageMemories = (VkDeviceMemory*)OpenVkRealloc(VkRenderer.ImageMemories, (VkRenderer.ImageCount + 1) * sizeof(VkDeviceMemory));
+//	VkRenderer.ImageViews = (VkImageView*)OpenVkRealloc(VkRenderer.ImageViews, (VkRenderer.ImageCount + 1) * sizeof(VkImageView));
+	VkImageInfo Image;
+	Image.Format = DepthFormat;
 
 	VkSampleCountFlagBits Samples = (VkSampleCountFlagBits)(VkRenderer.MsaaSamples < MsaaSamples ? VkRenderer.MsaaSamples : MsaaSamples);
 
 	if (Sampled)
 	{
-		if (VkCreateImage(Width, Height, 1, Samples, DepthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &VkRenderer.Images[VkRenderer.ImageCount], &VkRenderer.ImageMemories[VkRenderer.ImageCount]) == OPENVK_ERROR)
+		if (VkCreateImage(Width, Height, 1, Samples, DepthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &Image.Image, &Image.ImageMemory) == OPENVK_ERROR)
 			return OpenVkRuntimeError("Failed to Create Depth Sampled Attachment Image");
-		VkRenderer.ImageViews[VkRenderer.ImageCount] = VkCreateImageView(VkRenderer.Images[VkRenderer.ImageCount], DepthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
+		Image.ImageView = VkCreateImageView(Image.Image, DepthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
 	}
 	else
 	{
-		if (VkCreateImage(Width, Height, 1, Samples, DepthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &VkRenderer.Images[VkRenderer.ImageCount], &VkRenderer.ImageMemories[VkRenderer.ImageCount]) == OPENVK_ERROR)
+		if (VkCreateImage(Width, Height, 1, Samples, DepthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &Image.Image, &Image.ImageMemory) == OPENVK_ERROR)
 			return OpenVkRuntimeError("Failed to Create Depth Attachment Image");
-		VkRenderer.ImageViews[VkRenderer.ImageCount] = VkCreateImageView(VkRenderer.Images[VkRenderer.ImageCount], DepthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
+		Image.ImageView = VkCreateImageView(Image.Image, DepthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
 	}	
 
-	VkRenderer.ImageCount++;
+	return CMA_Push(&VkRenderer.ImageAttachments, &Image);
 
-	return VkRenderer.ImageCount - 1;
+//	VkRenderer.ImageCount++;
+//
+//	return VkRenderer.ImageCount - 1;
 }
 
 uint32_t VkCreateRenderPass(uint32_t ColorAttachmentCount, OpenVkBool DepthAttachment, OpenVkBool MsaaAttachment, uint32_t MsaaSamples, OpenVkBool Sampled)
@@ -810,7 +820,11 @@ uint32_t VkCreateFramebuffer(OpenVkFramebufferCreateInfo* Info)
 			if (Info->Attachments[j] == 0)
 				ImageViewAttachments[j] = VkRenderer.SwapChainImageViews[i];
 			else
-				ImageViewAttachments[j] = VkRenderer.ImageViews[Info->Attachments[j]];
+			{
+				VkImageInfo* ImageAttachment = (VkImageInfo*)CMA_GetAt(&VkRenderer.ImageAttachments, Info->Attachments[j]);
+				if (ImageAttachment != NULL)
+					ImageViewAttachments[j] = ImageAttachment->ImageView;
+			}				
 		}
 			
 
@@ -898,9 +912,14 @@ OpenVkDescriptorPool VkCreateDescriptorPool(uint32_t PoolSizeCount, uint32_t* De
 
 	for (uint32_t i = 0; i < PoolSizeCount; i++)
 	{
-		if (DescriptorTypes[i] == 0) PoolSizes[i].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-		if (DescriptorTypes[i] == 1) PoolSizes[i].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
-		if (DescriptorTypes[i] == 2) PoolSizes[i].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+	//	if (DescriptorTypes[i] == 0) PoolSizes[i].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	//	if (DescriptorTypes[i] == 1) PoolSizes[i].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+	//	if (DescriptorTypes[i] == 2) PoolSizes[i].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		if (DescriptorTypes[i] == OPENVK_DESCRIPTOR_TYPE_UNIFORM_BUFFER)			PoolSizes[i].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		if (DescriptorTypes[i] == OPENVK_DESCRIPTOR_TYPE_DYNAMIC_UNIFORM_BUFFER)	PoolSizes[i].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+		if (DescriptorTypes[i] == OPENVK_DESCRIPTOR_TYPE_IMAGE_SAMPLER)				PoolSizes[i].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		if (DescriptorTypes[i] == OPENVK_DESCRIPTOR_TYPE_STORAGE_IMAGE)				PoolSizes[i].type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+		if (DescriptorTypes[i] == OPENVK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE)	PoolSizes[i].type = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
 		PoolSizes[i].descriptorCount = DescriptorCounts[i] * MAX_FRAMES_IN_FLIGHT;
 		
 		MaxSets += DescriptorCounts[i] * MAX_FRAMES_IN_FLIGHT;
@@ -1001,7 +1020,7 @@ uint32_t VkCreateDescriptorSet(OpenVkDescriptorSetCreateInfo* Info)
 			{
 				//Uniform
 				if (DescriptorBufferInfos != NULL) OpenVkFree(DescriptorBufferInfos);
-				DescriptorBufferInfos = (VkDescriptorBufferInfo*)malloc(Info->DescriptorCounts[i] * sizeof(VkDescriptorBufferInfo));
+				DescriptorBufferInfos = (VkDescriptorBufferInfo*)OpenVkMalloc(Info->DescriptorCounts[i] * sizeof(VkDescriptorBufferInfo));
 				
 				for (uint32_t m = 0; m < Info->DescriptorCounts[i]; m++)
 				{
@@ -1016,7 +1035,7 @@ uint32_t VkCreateDescriptorSet(OpenVkDescriptorSetCreateInfo* Info)
 			{
 				//Dynamic Uniform
 				if (DescriptorBufferInfos != NULL) OpenVkFree(DescriptorBufferInfos);
-				DescriptorBufferInfos = (VkDescriptorBufferInfo*)malloc(Info->DescriptorCounts[i] * sizeof(VkDescriptorBufferInfo));
+				DescriptorBufferInfos = (VkDescriptorBufferInfo*)OpenVkMalloc(Info->DescriptorCounts[i] * sizeof(VkDescriptorBufferInfo));
 
 				for (uint32_t m = 0; m < Info->DescriptorCounts[i]; m++)
 				{
@@ -1027,14 +1046,16 @@ uint32_t VkCreateDescriptorSet(OpenVkDescriptorSetCreateInfo* Info)
 
 				DescriptorWrites[i] = VkDescriptorSetWrite(DescriptorSetInfo.DescriptorSets[j], Info->Bindings[i], VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, Info->DescriptorCounts[i], NULL, DescriptorBufferInfos);
 			}
-			if (Info->DescriptorTypes[i] == OPENVK_DESCRIPTOR_TYPE_IMAGE_SAMPLER)
+			if (Info->DescriptorTypes[i] == OPENVK_DESCRIPTOR_TYPE_IMAGE_SAMPLER || 
+				Info->DescriptorTypes[i] == OPENVK_DESCRIPTOR_TYPE_STORAGE_IMAGE)
 			{
 				//image
 				if (DescriptorImageInfos != NULL) OpenVkFree(DescriptorImageInfos);
-				DescriptorImageInfos = (VkDescriptorImageInfo*)malloc(Info->DescriptorCounts[i] * sizeof(VkDescriptorImageInfo));
+				DescriptorImageInfos = (VkDescriptorImageInfo*)OpenVkMalloc(Info->DescriptorCounts[i] * sizeof(VkDescriptorImageInfo));
 
 				for (uint32_t m = 0; m < Info->DescriptorCounts[i]; m++)
 				{
+					/*
 					VkSampler* ImageSampler = (VkSampler*)CMA_GetAt(&VkRenderer.Sampler, Info->Sampler[m]);
 					if (ImageSampler != NULL)
 						DescriptorImageInfos[m].sampler = *ImageSampler;
@@ -1043,9 +1064,9 @@ uint32_t VkCreateDescriptorSet(OpenVkDescriptorSetCreateInfo* Info)
 
 					if (Info->ImageTypes[m] == 0)
 					{
-						VkTextureImageInfo* TextureImage = (VkTextureImageInfo*)CMA_GetAt(&VkRenderer.TextureImages, Info->Images[m]);
+						VkImageInfo* TextureImage = (VkImageInfo*)CMA_GetAt(&VkRenderer.Images, Info->Images[m]);
 						if (TextureImage != NULL)
-							DescriptorImageInfos[m].imageView = TextureImage->TextureImageView;
+							DescriptorImageInfos[m].imageView = TextureImage->ImageView;
 						else
 						{
 							OpenVkFree(DescriptorWrites);
@@ -1055,12 +1076,61 @@ uint32_t VkCreateDescriptorSet(OpenVkDescriptorSetCreateInfo* Info)
 							return OpenVkRuntimeError("Failed to Find Texture Image View this can be ok");
 						}							
 					}
-					if (Info->ImageTypes[m] == 1) DescriptorImageInfos[m].imageView = VkRenderer.ImageViews[Info->Images[m]];//[j]?
-					if (Info->ImageLayouts[m] == 0) DescriptorImageInfos[m].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-					if (Info->ImageLayouts[m] == 1) DescriptorImageInfos[m].imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+					if (Info->ImageTypes[m] == 1) 
+					{
+						VkImageInfo* ImageView = (VkImageInfo*)CMA_GetAt(&VkRenderer.ImageAttachments, Info->Images[m]);
+						DescriptorImageInfos[m].imageView = ImageView->ImageView;
+					//	DescriptorImageInfos[m].imageView = VkRenderer.ImageViews[Info->Images[m]];//[j]?
+					}
+					*/
+					OpenVkBool Failed = OpenVkFalse;
+					if (Info->ImageTypes[m] == OPENVK_IMAGE_TYPE_TEXTURE)
+					{
+						VkSampler* ImageSampler = (VkSampler*)CMA_GetAt(&VkRenderer.Sampler, Info->Sampler[m]);
+						VkImageInfo* TextureImage = (VkImageInfo*)CMA_GetAt(&VkRenderer.Images, Info->Images[m]);
+
+						if (ImageSampler != NULL) DescriptorImageInfos[m].sampler = *ImageSampler;
+						else Failed = OpenVkTrue;
+						if (TextureImage != NULL) DescriptorImageInfos[m].imageView = TextureImage->ImageView;
+						else Failed = OpenVkTrue;
+					}
+					if (Info->ImageTypes[m] == OPENVK_IMAGE_TYPE_ATTACHMENT)
+					{
+						VkSampler* ImageSampler = (VkSampler*)CMA_GetAt(&VkRenderer.Sampler, Info->Sampler[m]);
+						VkImageInfo* TextureImage = (VkImageInfo*)CMA_GetAt(&VkRenderer.ImageAttachments, Info->Images[m]);
+
+						if (ImageSampler != NULL) DescriptorImageInfos[m].sampler = *ImageSampler;
+						else Failed = OpenVkTrue;
+						if (TextureImage != NULL) DescriptorImageInfos[m].imageView = TextureImage->ImageView;
+						else Failed = OpenVkTrue;
+					}
+					if (Info->ImageTypes[m] == OPENVK_IMAGE_TYPE_STORAGE)
+					{
+						VkImageInfo* Image = (VkImageInfo*)CMA_GetAt(&VkRenderer.Images, Info->Images[m]);
+
+						DescriptorImageInfos[m].sampler = 0;
+						if (Image != NULL) DescriptorImageInfos[m].imageView = Image->ImageView;
+						else Failed = OpenVkTrue;
+					}
+
+					if (Failed)
+					{
+						OpenVkFree(DescriptorWrites);
+						if (DescriptorBufferInfos != NULL) OpenVkFree(DescriptorBufferInfos);
+						if (DescriptorImageInfos != NULL) OpenVkFree(DescriptorImageInfos);
+
+						return OpenVkRuntimeError("Failed to desscriptor image stuff");
+					}
+
+					if (Info->ImageLayouts[m] == OPENVK_IMAGE_LAYOUT_COLOR_OUTPUT) DescriptorImageInfos[m].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+					if (Info->ImageLayouts[m] == OPENVK_IMAGE_LAYOUT_DEPTH_OUTPUT) DescriptorImageInfos[m].imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+					if (Info->ImageLayouts[m] == OPENVK_IMAGE_LAYOUT_GENERAL_OUTPUT) DescriptorImageInfos[m].imageLayout = VK_IMAGE_LAYOUT_GENERAL;
 				}
 
-				DescriptorWrites[i] = VkDescriptorSetWrite(DescriptorSetInfo.DescriptorSets[j], Info->Bindings[i], VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, Info->DescriptorCounts[i], DescriptorImageInfos, NULL);
+				if (Info->DescriptorTypes[i] == OPENVK_DESCRIPTOR_TYPE_IMAGE_SAMPLER)
+					DescriptorWrites[i] = VkDescriptorSetWrite(DescriptorSetInfo.DescriptorSets[j], Info->Bindings[i], VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, Info->DescriptorCounts[i], DescriptorImageInfos, NULL);
+				if (Info->DescriptorTypes[i] == OPENVK_DESCRIPTOR_TYPE_STORAGE_IMAGE)
+					DescriptorWrites[i] = VkDescriptorSetWrite(DescriptorSetInfo.DescriptorSets[j], Info->Bindings[i], VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, Info->DescriptorCounts[i], DescriptorImageInfos, NULL);
 			}
 			if (Info->DescriptorTypes[i] == OPENVK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE)
 			{
@@ -1261,10 +1331,11 @@ void VkEndRenderPass()
 uint32_t VkCreateTextureImage(const char* Path, OpenVkBool FlipVertical)
 {
 //	VkRenderer.TextureImageMemories = (VkDeviceMemory*)OpenVkRealloc(VkRenderer.TextureImageMemories, (VkRenderer.TextureImageCount + 1) * sizeof(VkDeviceMemory));
-//	VkRenderer.TextureImages = (VkImage*)OpenVkRealloc(VkRenderer.TextureImages, (VkRenderer.TextureImageCount + 1) * sizeof(VkImage));
+//	VkRenderer.Images = (VkImage*)OpenVkRealloc(VkRenderer.Images, (VkRenderer.TextureImageCount + 1) * sizeof(VkImage));
 //	VkRenderer.TextureImageViews = (VkImageView*)OpenVkRealloc(VkRenderer.TextureImageViews, (VkRenderer.TextureImageCount + 1) * sizeof(VkImageView));
 
-	VkTextureImageInfo TextureImage;
+	VkImageInfo TextureImage;
+	TextureImage.Format = VK_FORMAT_R8G8B8A8_UNORM;
 
 	int32_t TextureWidth;
 	int32_t TextureHeight;
@@ -1291,37 +1362,74 @@ uint32_t VkCreateTextureImage(const char* Path, OpenVkBool FlipVertical)
 
 	OpenVkFree(Pixel);
 
-	if (VkCreateImage(TextureWidth, TextureHeight, VkRenderer.MipLevels, VK_SAMPLE_COUNT_1_BIT, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &TextureImage.TextureImage, &TextureImage.TextureImageMemory) == OPENVK_ERROR)
+	if (VkCreateImage(TextureWidth, TextureHeight, VkRenderer.MipLevels, VK_SAMPLE_COUNT_1_BIT, TextureImage.Format, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &TextureImage.Image, &TextureImage.ImageMemory) == OPENVK_ERROR)
 		return OpenVkRuntimeError("Failed to create Texture Image");
 
-	VkTransitionImageLayout(TextureImage.TextureImage, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VkRenderer.MipLevels);
+	VkTransitionImageLayout(TextureImage.Image, TextureImage.Format, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VkRenderer.MipLevels);
 
-	VkCopyBufferToImage(StagingBuffer, TextureImage.TextureImage, TextureWidth, TextureHeight);
+	VkCopyBufferToImage(StagingBuffer, TextureImage.Image, TextureWidth, TextureHeight);
 	//	if (TransitionImageLayout(TextureImages, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, MipLevels) != VK_SUCCESS)
 	//		return 1;
-	VkGenerateMipmaps(TextureImage.TextureImage, VK_FORMAT_R8G8B8A8_UNORM, TextureWidth, TextureHeight, VkRenderer.MipLevels);
+	VkGenerateMipmaps(TextureImage.Image, TextureImage.Format, TextureWidth, TextureHeight, VkRenderer.MipLevels);
 
 	vkDestroyBuffer(VkRenderer.Device, StagingBuffer, NULL);
 	vkFreeMemory(VkRenderer.Device, StagingBufferMemory, NULL);
 
-	TextureImage.TextureImageView = VkCreateImageView(TextureImage.TextureImage, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT, VkRenderer.MipLevels);
+	TextureImage.ImageView = VkCreateImageView(TextureImage.Image, TextureImage.Format, VK_IMAGE_ASPECT_COLOR_BIT, VkRenderer.MipLevels);
 
-	return CMA_Push(&VkRenderer.TextureImages, &TextureImage);
+	return CMA_Push(&VkRenderer.Images, &TextureImage);
 }
 
-void VkDestroyTextureImage(uint32_t TextureImage)
+uint32_t VkCreateStorageImage(uint32_t Width, uint32_t Height)
+{
+	VkImageInfo Image;
+	Image.Format = VkRenderer.SwapChainImageFormat;
+	VkCreateImage(Width, Height, 1, VK_SAMPLE_COUNT_1_BIT, Image.Format, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_STORAGE_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &Image.Image, &Image.ImageMemory);
+	Image.ImageView = VkCreateImageView(Image.Image, Image.Format, VK_IMAGE_ASPECT_COLOR_BIT, 1);
+
+	VkImageMemoryBarrier ImageMemoryBarrier;
+	ImageMemoryBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+	ImageMemoryBarrier.pNext = NULL;
+	ImageMemoryBarrier.srcAccessMask = 0;
+	ImageMemoryBarrier.dstAccessMask = 0;
+	ImageMemoryBarrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	ImageMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+	ImageMemoryBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	ImageMemoryBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	ImageMemoryBarrier.image = Image.Image;
+	ImageMemoryBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	ImageMemoryBarrier.subresourceRange.baseMipLevel = 0;
+	ImageMemoryBarrier.subresourceRange.levelCount = 1;
+	ImageMemoryBarrier.subresourceRange.baseArrayLayer = 0;
+	ImageMemoryBarrier.subresourceRange.layerCount = 1;
+
+	VkCommandBuffer CommandBuffer = VkBeginSingleTimeCommands();
+	vkCmdPipelineBarrier(
+		CommandBuffer,
+		VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+		VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+		0,
+		0, NULL,
+		0, NULL,
+		1, &ImageMemoryBarrier);
+	VkEndSingleTimeCommandBuffer(CommandBuffer);
+
+	return CMA_Push(&VkRenderer.Images, &Image);
+}
+
+void VkDestroyImage(uint32_t InImage)
 {
 	vkDeviceWaitIdle(VkRenderer.Device);
 
-	VkTextureImageInfo* Image = (VkTextureImageInfo*)CMA_GetAt(&VkRenderer.TextureImages, TextureImage);
+	VkImageInfo* Image = (VkImageInfo*)CMA_GetAt(&VkRenderer.Images, InImage);
 	if (Image != NULL)
 	{
-		vkDestroyImageView(VkRenderer.Device, Image->TextureImageView, NULL);
+		vkDestroyImageView(VkRenderer.Device, Image->ImageView, NULL);
 
-		vkDestroyImage(VkRenderer.Device, Image->TextureImage, NULL);
-		vkFreeMemory(VkRenderer.Device, Image->TextureImageMemory, NULL);
+		vkDestroyImage(VkRenderer.Device, Image->Image, NULL);
+		vkFreeMemory(VkRenderer.Device, Image->ImageMemory, NULL);
 
-		CMA_Pop(&VkRenderer.TextureImages, TextureImage);
+		CMA_Pop(&VkRenderer.Images, InImage);
 	}	
 }
 
@@ -1583,13 +1691,25 @@ void VkCleanupSwapChain()
 		vkDestroyImageView(VkRenderer.Device, VkRenderer.SwapChainImageViews[i], NULL);
 	}
 
-	for (uint32_t i = 1; i < VkRenderer.ImageCount; i++)
-	{
-		vkFreeMemory(VkRenderer.Device, VkRenderer.ImageMemories[i], NULL);
-		vkDestroyImage(VkRenderer.Device, VkRenderer.Images[i], NULL);
-		vkDestroyImageView(VkRenderer.Device, VkRenderer.ImageViews[i], NULL);
-	}		
+//	for (uint32_t i = 1; i < VkRenderer.ImageCount; i++)
+//	{
+//		vkFreeMemory(VkRenderer.Device, VkRenderer.ImageMemories[i], NULL);
+//		vkDestroyImage(VkRenderer.Device, VkRenderer.Images[i], NULL);
+//		vkDestroyImageView(VkRenderer.Device, VkRenderer.ImageViews[i], NULL);
+//	}		
 	
+	for (uint32_t i = 1; i < VkRenderer.ImageAttachments.Size; i++)
+	{
+		VkImageInfo* ImageAttachment = (VkImageInfo*)CMA_GetAt(&VkRenderer.ImageAttachments, i);
+		if (ImageAttachment != NULL)
+		{
+			vkDestroyImageView(VkRenderer.Device, ImageAttachment->ImageView, NULL);
+			vkDestroyImage(VkRenderer.Device, ImageAttachment->Image, NULL);
+			vkFreeMemory(VkRenderer.Device, ImageAttachment->ImageMemory, NULL);
+			CMA_Pop(&VkRenderer.ImageAttachments, i);
+		}
+	}
+
 		//	for (uint32_t i = 0; i < VkRenderer.ImageCount; i++)
 		//	{
 		//		if (i != 0)
@@ -1625,7 +1745,7 @@ void VkRecreateSwapChain(uint32_t* Width, uint32_t* Height)
 	VkCleanupSwapChain();
 
 	VkRenderer.SwapChainImageCount = 0;
-	VkRenderer.ImageCount = 1;
+//	VkRenderer.ImageCount = 1;
 	VkRenderer.RenderPassCount = 0;
 	VkRenderer.FramebufferCount = 0;
 //	VkRenderer.DescriptorSetCount = 0;
@@ -1678,19 +1798,19 @@ void VkDestroyRenderer()
 //		OpenVkFree(VkRenderer.Sampler);
 	CMA_Destroy(&VkRenderer.Sampler);
 
-	for (uint32_t i = 0; i < VkRenderer.TextureImages.Size; i++)
+	for (uint32_t i = 0; i < VkRenderer.Images.Size; i++)
 	{
-		VkTextureImageInfo* TextureImage = (VkTextureImageInfo*)CMA_GetAt(&VkRenderer.TextureImages, i);
+		VkImageInfo* TextureImage = (VkImageInfo*)CMA_GetAt(&VkRenderer.Images, i);
 		if (TextureImage != NULL)
 		{
-			vkDestroyImageView(VkRenderer.Device, TextureImage->TextureImageView, NULL);
-			vkDestroyImage(VkRenderer.Device, TextureImage->TextureImage, NULL);
-			vkFreeMemory(VkRenderer.Device, TextureImage->TextureImageMemory, NULL);
+			vkDestroyImageView(VkRenderer.Device, TextureImage->ImageView, NULL);
+			vkDestroyImage(VkRenderer.Device, TextureImage->Image, NULL);
+			vkFreeMemory(VkRenderer.Device, TextureImage->ImageMemory, NULL);
 		}		
 	}
 
 //	OpenVkFree(VkRenderer.TextureImageViews);
-//	OpenVkFree(VkRenderer.TextureImages);
+//	OpenVkFree(VkRenderer.Images);
 //	OpenVkFree(VkRenderer.TextureImageMemories);
 
 	for (uint32_t i = 0; i < VkRenderer.DescriptorSetLayoutCount; i++)
@@ -1728,7 +1848,7 @@ void VkDestroyRenderer()
 
 	CMA_Destroy(&VkRenderer.DescriptorSets);
 	CMA_Destroy(&VkRenderer.Buffers);
-	CMA_Destroy(&VkRenderer.TextureImages);
+	CMA_Destroy(&VkRenderer.Images);
 
 //	OpenVkFree(VkRenderer.Pipelines);
 //	OpenVkFree(VkRenderer.PipelineLayouts);
