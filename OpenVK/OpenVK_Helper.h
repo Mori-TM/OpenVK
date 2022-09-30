@@ -89,6 +89,12 @@ typedef enum
 	OPENVK_IMAGE_TYPE_STORAGE = 0x2,
 } OpenVkImageTypes;
 
+typedef enum
+{
+	OPENVK_PIPELINE_TYPE_GRAPHICS = 0x0,
+	OPENVK_PIPELINE_TYPE_RAYTRACING = 0x1,
+} OpenVkPipelineTypes;
+
 typedef struct
 {
 	OpenVkBool	Dynamic;
@@ -152,6 +158,7 @@ typedef struct
 	uint32_t*				ImageTypes;
 	uint32_t*				Images;
 	uint32_t*				ImageLayouts;
+	uint32_t*				TopLevelAS;
 	uint32_t*				Bindings;
 } OpenVkDescriptorSetCreateInfo;
 

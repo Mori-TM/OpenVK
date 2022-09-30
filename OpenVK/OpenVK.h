@@ -26,7 +26,7 @@ uint32_t				(*OpenVkCreateRenderPass			)(uint32_t ColorAttachmentCount, OpenVkBo
 uint32_t				(*OpenVkCreateGraphicsPipeline		)(OpenVkGraphicsPipelineCreateInfo* Info);
 uint32_t				(*OpenVkCreatePipelineLayout		)(OpenVkPipelineLayoutCreateInfo* Info);
 uint32_t				(*OpenVkCreateFramebuffer			)(OpenVkFramebufferCreateInfo* Info);
-uint32_t				(*OpenVkCreateDescriptorSetLayout	)(uint32_t Binding, uint32_t BindingCount, uint32_t* DescriptorCounts, uint32_t* DescriptorTypes, uint32_t* ShaderTypes);
+uint32_t				(*OpenVkCreateDescriptorSetLayout	)(uint32_t BindingCount, uint32_t* Bindings, uint32_t* DescriptorCounts, uint32_t* DescriptorTypes, uint32_t* ShaderTypes);
 OpenVkDescriptorPool	(*OpenVkCreateDescriptorPool		)(uint32_t PoolSizeCount, uint32_t* DescriptorTypes, uint32_t* DescriptorCounts, OpenVkBool Dynamic);
 uint32_t				(*OpenVkCreateDescriptorSet			)(OpenVkDescriptorSetCreateInfo* Info);
 OpenVkBool				(*OpenVkDrawFrame					)(void (*RenderFunc)(void), void (*ResizeFunc)(void), void (*UpdateFunc)(void));
@@ -35,8 +35,9 @@ OpenVkBool				(*OpenVkEndFrame					)();
 void					(*OpenVkBeginRenderPass				)(OpenVkBeginRenderPassInfo* Info);
 void					(*OpenVkEndRenderPass				)();
 uint32_t				(*OpenVkCreateTextureImage			)(const char* Path, OpenVkBool FlipVertical);
-uint32_t				(*OpenVkCreateStorageImage				)(uint32_t Width, uint32_t Height);
+uint32_t				(*OpenVkCreateStorageImage			)(uint32_t Width, uint32_t Height);
 void					(*OpenVkDestroyImage				)(uint32_t TextureImage);
+OpenVkBool				(*OpenVkCopyImage					)(uint32_t Width, uint32_t Height, uint32_t Src, uint32_t Dst);
 uint32_t				(*OpenVkCreateImageSampler			)(uint32_t Filter, uint32_t AddressMode);
 void					(*OpenVkDestroySampler				)(uint32_t Sampler);
 uint32_t				(*OpenVkCreateColorImageAttachment	)(uint32_t Width, uint32_t Height, uint32_t MsaaSamples, OpenVkBool Sampled);
@@ -48,15 +49,15 @@ void					(*OpenVkUpdateDynamicUniformBuffer	)(size_t Size, const void* UBO, uint
 uint32_t				(*OpenVkCreateVertexBuffer			)(size_t Size, const void* Vertices);
 uint32_t				(*OpenVkCreateIndexBuffer			)(size_t Size, const void* Indices);
 void					(*OpenVkDestroyBuffer				)(uint32_t Buffer);
-void					(*OpenVkBindGraphicsPipeline		)(uint32_t Pipeline);
+void					(*OpenVkBindPipeline				)(uint32_t Pipeline, uint32_t PipelineType);
 void					(*OpenVkSetViewport					)(float x, float y, float Width, float Height);
 void					(*OpenVkSetScissor					)(int32_t x, int32_t y, uint32_t Width, uint32_t Height);
 void					(*OpenVkBindVertexBuffer			)(uint32_t VertexBuffer);
 void					(*OpenVkBindIndexBuffer				)(uint32_t VertexBuffer, uint32_t IndexBuffer);
 void					(*OpenVkDrawVertices				)(uint32_t VertexCount);
 void					(*OpenVkDrawIndices					)(uint32_t IndexCount);
-void					(*OpenVkBindDescriptorSet			)(uint32_t Pipeline, uint32_t Set, uint32_t DescriptorSet);
-void					(*OpenVkPushConstant				)(uint32_t Pipeline, uint32_t ShaderType, uint32_t Offset, size_t Size, const void* Data);
+void					(*OpenVkBindDescriptorSet			)(uint32_t PipelineLayout, uint32_t Set, uint32_t DescriptorSet, uint32_t PipelineType);
+void					(*OpenVkPushConstant				)(uint32_t PipelineLayout, uint32_t ShaderType, uint32_t Offset, size_t Size, const void* Data);
 
 extern inline uint32_t OpenVkCreateRenderer(uint32_t RendererFlags, const char** (*GetExtensions)(uint32_t* ExtensionCount), VkSurfaceKHR(*GetSurface)(VkInstance* Instance), void (*GetWindowSize)(uint32_t* Width, uint32_t* Height))
 {
@@ -83,6 +84,7 @@ extern inline uint32_t OpenVkCreateRenderer(uint32_t RendererFlags, const char**
 		OpenVkCreateTextureImage = VkCreateTextureImage;
 		OpenVkCreateStorageImage = VkCreateStorageImage;
 		OpenVkDestroyImage = VkDestroyImage;
+		OpenVkCopyImage = VkCopyImage;
 		OpenVkCreateImageSampler = VkCreateImageSampler;
 		OpenVkDestroySampler = VkDestroySampler;
 		OpenVkCreateColorImageAttachment = VkCreateColorImageAttachment;
@@ -94,7 +96,7 @@ extern inline uint32_t OpenVkCreateRenderer(uint32_t RendererFlags, const char**
 		OpenVkCreateVertexBuffer = VkCreateVertexBuffer;
 		OpenVkCreateIndexBuffer = VkCreateIndexBuffer;
 		OpenVkDestroyBuffer = VkDestroyBuffer;
-		OpenVkBindGraphicsPipeline = VkBindGraphicsPipeline;
+		OpenVkBindPipeline = VkBindPipeline;
 		OpenVkSetViewport = VkSetViewport;
 		OpenVkSetScissor = VkSetScissor;
 		OpenVkBindVertexBuffer = VkBindVertexBuffer;

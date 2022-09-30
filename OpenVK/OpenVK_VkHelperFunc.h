@@ -1,4 +1,4 @@
-#define MAX_FRAMES_IN_FLIGHT 2
+#define MAX_FRAMES_IN_FLIGHT 1
 
 typedef struct
 {
@@ -316,7 +316,8 @@ VkCommandBuffer VkBeginSingleTimeCommands()
 	AllocateInfo.commandBufferCount = 1;
 
 	VkCommandBuffer CommandBuffer;
-	vkAllocateCommandBuffers(VkRenderer.Device, &AllocateInfo, &CommandBuffer);
+	if (vkAllocateCommandBuffers(VkRenderer.Device, &AllocateInfo, &CommandBuffer) != VK_SUCCESS)
+		OpenVkRuntimeError("Failed to allocate single time command buffer");
 
 	VkCommandBufferBeginInfo BeginInfo;
 	BeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -324,15 +325,44 @@ VkCommandBuffer VkBeginSingleTimeCommands()
 	BeginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 	BeginInfo.pInheritanceInfo = NULL;
 
-	vkBeginCommandBuffer(CommandBuffer, &BeginInfo);
+	if (vkBeginCommandBuffer(CommandBuffer, &BeginInfo) != VK_SUCCESS)
+		OpenVkRuntimeError("Failed to begin single time command buffer");
 
 	return CommandBuffer;
 }
 
-void VkEndSingleTimeCommandBuffer(VkCommandBuffer CommandBuffer)
+OpenVkBool VkEndSingleTimeCommandBufferOld(VkCommandBuffer CommandBuffer)
 {
-	vkEndCommandBuffer(CommandBuffer);
+	if (vkEndCommandBuffer(CommandBuffer) != VK_SUCCESS)
+		return OpenVkRuntimeError("Failed to end single time command buffer");
 
+	VkSubmitInfo SubmitInfo;
+	SubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+	SubmitInfo.pNext = NULL;
+	SubmitInfo.waitSemaphoreCount = 0;
+	SubmitInfo.pWaitSemaphores = NULL;
+	SubmitInfo.pWaitDstStageMask = NULL;
+	SubmitInfo.commandBufferCount = 1;
+	SubmitInfo.pCommandBuffers = &CommandBuffer;
+	SubmitInfo.signalSemaphoreCount = 0;
+	SubmitInfo.pSignalSemaphores = NULL;
+
+	if (vkQueueSubmit(VkRenderer.GraphicsQueue, 1, &SubmitInfo, 0) != VK_SUCCESS)
+		return OpenVkRuntimeError("Failed to submit single time command buffer queue");
+
+	if (vkQueueWaitIdle(VkRenderer.GraphicsQueue) != VK_SUCCESS)
+		return OpenVkRuntimeError("Failed to wait for single time command buffer queue");
+
+	vkFreeCommandBuffers(VkRenderer.Device, VkRenderer.CommandPool, 1, &CommandBuffer);
+
+	return OpenVkTrue;
+}
+
+OpenVkBool VkEndSingleTimeCommandBuffer(VkCommandBuffer CommandBuffer)
+{
+	if (vkEndCommandBuffer(CommandBuffer) != VK_SUCCESS)
+		return OpenVkRuntimeError("Failed to end single time command buffer");
+	
 	VkSubmitInfo SubmitInfo;
 	SubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 	SubmitInfo.pNext = NULL;
@@ -349,14 +379,22 @@ void VkEndSingleTimeCommandBuffer(VkCommandBuffer CommandBuffer)
 	FenceCreateInfo.pNext = NULL;
 	FenceCreateInfo.flags = 0;
 	VkFence Fence;
-	vkCreateFence(VkRenderer.Device, &FenceCreateInfo, NULL, &Fence);
+	
 
-	vkQueueSubmit(VkRenderer.GraphicsQueue, 1, &SubmitInfo, Fence);
-//	vkQueueWaitIdle(VkRenderer.GraphicsQueue);
-	vkWaitForFences(VkRenderer.Device, 1, &Fence, VK_TRUE, UINT64_MAX);
+	if (vkCreateFence(VkRenderer.Device, &FenceCreateInfo, NULL, &Fence) != VK_SUCCESS)
+		return OpenVkRuntimeError("Failed to create single time command buffer fence");
+
+	if (vkQueueSubmit(VkRenderer.GraphicsQueue, 1, &SubmitInfo, Fence) != VK_SUCCESS)
+		return OpenVkRuntimeError("Failed to submit single time command buffer queue");
+
+	if (vkWaitForFences(VkRenderer.Device, 1, &Fence, VK_TRUE, UINT64_MAX) != VK_SUCCESS)
+		return OpenVkRuntimeError("Failed to wait for single time command buffer fence");
+
 	vkDestroyFence(VkRenderer.Device, Fence, NULL);
 
 	vkFreeCommandBuffers(VkRenderer.Device, VkRenderer.CommandPool, 1, &CommandBuffer);
+	
+	return OpenVkTrue;
 }
 
 void VkCopyBuffer(VkBuffer SrcBuffer, VkBuffer DstBuffer, VkDeviceSize Size)
@@ -415,7 +453,7 @@ OpenVkBool VkCreateBuffer(VkDeviceSize Size, VkBufferUsageFlags Usage, VkMemoryP
 	return 1;
 }
 
-uint32_t VkCreateBufferExt(VkBufferUsageFlags SrcUsage, VkMemoryPropertyFlags SrcProperties, VkBufferUsageFlags DstUsage, VkMemoryPropertyFlags DstProperties, size_t Size, const void* InData)
+uint32_t VkCreateBufferExt(VkBufferUsageFlags SrcUsage, VkMemoryPropertyFlags SrcProperties, VkBufferUsageFlags DstUsage, VkMemoryPropertyFlags DstProperties, size_t Size, const void* InData, void* OutData)
 {
 	VkBufferInfo BufferInfo;
 
@@ -424,13 +462,31 @@ uint32_t VkCreateBufferExt(VkBufferUsageFlags SrcUsage, VkMemoryPropertyFlags Sr
 	if (VkCreateBuffer(Size, SrcUsage, SrcProperties, &StagingBuffer, &StagingBufferMemory) == OPENVK_ERROR)
 		return OpenVkRuntimeError("Failed to Create Buffer: Func 0");
 
-	if (InData != NULL)
+	if (OutData != NULL)
+	{
+		vkMapMemory(VkRenderer.Device, StagingBufferMemory, 0, Size, 0, &OutData);
+		memcpy(OutData, InData, Size);
+	//	vkUnmapMemory(VkRenderer.Device, StagingBufferMemory);
+	}	
+	else
 	{
 		void* Data;
 		vkMapMemory(VkRenderer.Device, StagingBufferMemory, 0, Size, 0, &Data);
 		memcpy(Data, InData, Size);
+
+		if ((SrcProperties & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) == 0)
+		{
+			VkMappedMemoryRange MappedRange;
+			MappedRange.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
+			MappedRange.memory = StagingBufferMemory;
+			MappedRange.offset = 0;
+			MappedRange.size = VK_WHOLE_SIZE;
+			if (vkFlushMappedMemoryRanges(VkRenderer.Device, 1, &MappedRange) != VK_SUCCESS)
+				return OpenVkRuntimeError("Failed to flush mapped buffer memory ranges");
+		}
+
 		vkUnmapMemory(VkRenderer.Device, StagingBufferMemory);
-	}	
+	}
 
 	if (VkCreateBuffer(Size, DstUsage, DstProperties, &BufferInfo.Buffer, &BufferInfo.BufferMemory) == OPENVK_ERROR)
 		return OpenVkRuntimeError("Failed to Create Buffer: Func 1");
@@ -529,18 +585,18 @@ VkDescriptorSetAllocateInfo VkAllocateDescriptorSets(VkDescriptorPool Descriptor
 	return AllocateInfo;
 }
 
-VkWriteDescriptorSet VkDescriptorSetWrite(VkDescriptorSet DstSet, uint32_t DstBinding, VkDescriptorType DescriptorType, uint32_t DescriptorCount, VkDescriptorImageInfo* ImageInfo, VkDescriptorBufferInfo* BufferInfo)
+VkWriteDescriptorSet VkDescriptorSetWrite(VkDescriptorSet DstSet, uint32_t DstBinding, VkDescriptorType DescriptorType, uint32_t DescriptorCount, VkDescriptorImageInfo* ImageInfos, VkDescriptorBufferInfo* BufferInfos, VkWriteDescriptorSetAccelerationStructureKHR* ASInfos)
 {
 	VkWriteDescriptorSet DescriptorWrite;
 	DescriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-	DescriptorWrite.pNext = NULL;
+	DescriptorWrite.pNext = ASInfos;
 	DescriptorWrite.dstSet = DstSet;
 	DescriptorWrite.dstBinding = DstBinding;
 	DescriptorWrite.dstArrayElement = 0;
 	DescriptorWrite.descriptorCount = DescriptorCount;
 	DescriptorWrite.descriptorType = DescriptorType;
-	DescriptorWrite.pImageInfo = ImageInfo;
-	DescriptorWrite.pBufferInfo = BufferInfo;
+	DescriptorWrite.pImageInfo = ImageInfos;
+	DescriptorWrite.pBufferInfo = BufferInfos;
 	DescriptorWrite.pTexelBufferView = NULL;
 
 	return DescriptorWrite;
@@ -563,7 +619,210 @@ VkSampleCountFlagBits VkGetMaxSampleCount()
 	return VK_SAMPLE_COUNT_1_BIT;
 }
 
+void VkSetImageLayout(VkCommandBuffer CommandBuffer, VkImage Image, VkImageLayout OldImageLayout, VkImageLayout NewImageLayout, VkImageSubresourceRange* SubresourceRange)
+{
+	VkImageMemoryBarrier ImageMemoryBarrier;
+	ImageMemoryBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+	ImageMemoryBarrier.pNext = NULL;
+	ImageMemoryBarrier.srcAccessMask = 0;
+	ImageMemoryBarrier.dstAccessMask = 0;
+	ImageMemoryBarrier.oldLayout = OldImageLayout;
+	ImageMemoryBarrier.newLayout = NewImageLayout;
+	ImageMemoryBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	ImageMemoryBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	ImageMemoryBarrier.image = Image;
+	if (SubresourceRange)
+	{
+		ImageMemoryBarrier.subresourceRange = *SubresourceRange;
+	}
+	else
+	{
+		ImageMemoryBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		ImageMemoryBarrier.subresourceRange.baseMipLevel = 0;
+		ImageMemoryBarrier.subresourceRange.levelCount = 1;
+		ImageMemoryBarrier.subresourceRange.baseArrayLayer = 0;
+		ImageMemoryBarrier.subresourceRange.layerCount = 1;
+	}
+	
+	switch (OldImageLayout)
+	{
+	case VK_IMAGE_LAYOUT_UNDEFINED:
+		ImageMemoryBarrier.srcAccessMask = 0;
+		break;
+
+	case VK_IMAGE_LAYOUT_PREINITIALIZED:
+		ImageMemoryBarrier.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
+		break;
+
+	case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL:
+		ImageMemoryBarrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+		break;
+
+	case VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL:
+		ImageMemoryBarrier.srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+		break;
+
+	case VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL:
+		ImageMemoryBarrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+		break;
+
+	case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL:
+		ImageMemoryBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+		break;
+
+	case VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL:
+		ImageMemoryBarrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+		break;
+	default:
+		break;
+	}
+
+	switch (NewImageLayout)
+	{
+	case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL:
+		ImageMemoryBarrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+		break;
+
+	case VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL:
+		ImageMemoryBarrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+		break;
+
+	case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL:
+		ImageMemoryBarrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+		break;
+
+	case VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL:
+		ImageMemoryBarrier.dstAccessMask = ImageMemoryBarrier.dstAccessMask | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+		break;
+
+	case VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL:
+		if (ImageMemoryBarrier.srcAccessMask == 0)
+			ImageMemoryBarrier.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
+		ImageMemoryBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+		break;
+	default:
+		break;
+	}
+	
+
+	VkPipelineStageFlags SourceStage = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+	VkPipelineStageFlags DestinationStage = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+	/*
+	switch (OldImageLayout)
+	{
+	case VK_IMAGE_LAYOUT_UNDEFINED:
+		// Image layout is undefined (or does not matter)
+		// Only valid as initial layout
+		// No flags required, listed only for completeness
+		ImageMemoryBarrier.srcAccessMask = 0;
+		SourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+		break;
+
+	case VK_IMAGE_LAYOUT_PREINITIALIZED:
+		// Image is preinitialized
+		// Only valid as initial layout for linear images, preserves memory contents
+		// Make sure host writes have been finished
+		ImageMemoryBarrier.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
+		break;
+
+	case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL:
+		// Image is a color attachment
+		// Make sure any writes to the color buffer have been finished
+		ImageMemoryBarrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+		break;
+
+	case VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL:
+		// Image is a depth/stencil attachment
+		// Make sure any writes to the depth/stencil buffer have been finished
+		ImageMemoryBarrier.srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+		break;
+
+	case VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL:
+		// Image is a transfer source
+		// Make sure any reads from the image have been finished
+		ImageMemoryBarrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+		break;
+
+	case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL:
+		// Image is a transfer destination
+		// Make sure any writes to the image have been finished
+		ImageMemoryBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+		SourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+		break;
+
+	case VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL:
+		// Image is read by a shader
+		// Make sure any shader reads from the image have been finished
+		ImageMemoryBarrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+		break;
+	default:
+		// Other source layouts aren't handled (yet)
+		break;
+	}
+
+	// Target layouts (new)
+	// Destination access mask controls the dependency for the new image layout
+	switch (NewImageLayout)
+	{
+	case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL:
+		// Image will be used as a transfer destination
+		// Make sure any writes to the image have been finished
+		ImageMemoryBarrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+
+		
+		DestinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+		break;
+
+	case VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL:
+		// Image will be used as a transfer source
+		// Make sure any reads from the image have been finished
+		ImageMemoryBarrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+		break;
+
+	case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL:
+		// Image will be used as a color attachment
+		// Make sure any writes to the color buffer have been finished
+		ImageMemoryBarrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+		break;
+
+	case VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL:
+		// Image layout will be used as a depth/stencil attachment
+		// Make sure any writes to depth/stencil buffer have been finished
+		ImageMemoryBarrier.dstAccessMask = ImageMemoryBarrier.dstAccessMask | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+		break;
+
+	case VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL:
+		// Image will be read in a shader (sampler, input attachment)
+		// Make sure any writes to the image have been finished
+		if (ImageMemoryBarrier.srcAccessMask == 0)
+		{
+			ImageMemoryBarrier.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
+		}
+		ImageMemoryBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+		break;
+	case VK_IMAGE_LAYOUT_PRESENT_SRC_KHR:
+		ImageMemoryBarrier.dstAccessMask = 0;
+		SourceStage = VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR;
+		DestinationStage = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+		break;
+	default:
+		// Other source layouts aren't handled (yet)
+		break;
+	}
+	*/
+
+	vkCmdPipelineBarrier(
+		CommandBuffer,
+		SourceStage,
+		DestinationStage,
+		0,
+		0, NULL,
+		0, NULL,
+		1, &ImageMemoryBarrier);
+}
+
 //Textures
+//merge this with SetImageLayout
 void VkTransitionImageLayout(VkImage Image, VkFormat Format, VkImageLayout OldLayout, VkImageLayout NewLayout, uint32_t MipLevels)
 {
 	VkCommandBuffer CommandBuffer = VkBeginSingleTimeCommands();
