@@ -15,7 +15,7 @@
 #include "OpenVK_Helper.h"
 
 //FIX Vulkan
-//descriptor set/pools get destroy every resize except the dynamic one thats pretty fucked up
+//descriptor pools get destroy every resize except the dynamic one thats pretty fucked up
 #include "OpenVK_VkHelperFunc.h"
 #include "OpenVK_VkRaytracing.h"
 #include "OpenVK_VkRenderer.h"
@@ -36,14 +36,14 @@ void					(*OpenVkBeginRenderPass				)(OpenVkBeginRenderPassInfo* Info);
 void					(*OpenVkEndRenderPass				)();
 uint32_t				(*OpenVkCreateTextureImage			)(const char* Path, OpenVkBool FlipVertical);
 uint32_t				(*OpenVkCreateStorageImage			)(uint32_t Width, uint32_t Height);
-void					(*OpenVkDestroyImage				)(uint32_t TextureImage);
+void					(*OpenVkDestroyImage				)(uint32_t InImage);
 OpenVkBool				(*OpenVkCopyImage					)(uint32_t Width, uint32_t Height, uint32_t Src, uint32_t Dst);
 uint32_t				(*OpenVkCreateImageSampler			)(uint32_t Filter, uint32_t AddressMode);
 void					(*OpenVkDestroySampler				)(uint32_t Sampler);
 uint32_t				(*OpenVkCreateColorImageAttachment	)(uint32_t Width, uint32_t Height, uint32_t MsaaSamples, OpenVkBool Sampled);
 uint32_t				(*OpenVkCreateDepthImageAttachment	)(uint32_t Width, uint32_t Height, uint32_t MsaaSamples, OpenVkBool Sampled);
 uint32_t				(*OpenVkCreateUniformBuffer			)(size_t Size);
-void					(*OpenVkUpdateUniformBuffer			)(size_t Size, const void* UBO, uint32_t UniformBuffer);
+OpenVkBool				(*OpenVkUpdateBuffer				)(size_t Size, const void* BufferData, uint32_t Buffer);
 uint32_t				(*OpenVkCreateDynamicUniformBuffer	)(size_t Size);
 void					(*OpenVkUpdateDynamicUniformBuffer	)(size_t Size, const void* UBO, uint32_t UniformBuffer);
 uint32_t				(*OpenVkCreateVertexBuffer			)(size_t Size, const void* Vertices);
@@ -61,6 +61,7 @@ void					(*OpenVkPushConstant				)(uint32_t PipelineLayout, uint32_t ShaderType,
 
 extern inline uint32_t OpenVkCreateRenderer(uint32_t RendererFlags, const char** (*GetExtensions)(uint32_t* ExtensionCount), VkSurfaceKHR(*GetSurface)(VkInstance* Instance), void (*GetWindowSize)(uint32_t* Width, uint32_t* Height))
 {
+	OpenVkRendererFlags = RendererFlags;
 	OpenVkRuntimeInfo("Validation Layers: ", (RendererFlags & OPENVK_VALIDATION_LAYER ? "Enabled" : "Disabled"));
 	OpenVkRuntimeInfo("Raytracing: ", (RendererFlags & OPENVK_RAYTRACING ? "Enabled" : "Disabled"));	
 
@@ -90,7 +91,7 @@ extern inline uint32_t OpenVkCreateRenderer(uint32_t RendererFlags, const char**
 		OpenVkCreateColorImageAttachment = VkCreateColorImageAttachment;
 		OpenVkCreateDepthImageAttachment = VkCreateDepthImageAttachment;
 		OpenVkCreateUniformBuffer = VkCreateUniformBuffer;
-		OpenVkUpdateUniformBuffer = VkUpdateUniformBuffer;
+		OpenVkUpdateBuffer = VkUpdateBuffer;
 		OpenVkCreateDynamicUniformBuffer = VkCreateDynamicUniformBuffer;
 		OpenVkUpdateDynamicUniformBuffer = VkUpdateDynamicUniformBuffer;
 		OpenVkCreateVertexBuffer = VkCreateVertexBuffer;
@@ -106,7 +107,7 @@ extern inline uint32_t OpenVkCreateRenderer(uint32_t RendererFlags, const char**
 		OpenVkBindDescriptorSet = VkBindDescriptorSet;
 		OpenVkPushConstant = VkPushConstant;
 
-		return VkCreateRenderer(RendererFlags, GetExtensions, GetSurface, GetWindowSize);
+		return VkCreateRenderer(GetExtensions, GetSurface, GetWindowSize);
 	}
 	else if (RendererFlags & OPENVK_DIRECTX_12)
 	{

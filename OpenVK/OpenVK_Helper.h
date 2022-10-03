@@ -1,5 +1,7 @@
 static void (*GetWindowSizeFunc)(uint32_t* Width, uint32_t* Height) = NULL;
+uint32_t OpenVkRendererFlags;
 
+//typedef enum { OpenVkFalse = 0, OpenVkTrue = 1, OpenVkBoolMaxBits = 0xffffffffui32 } OpenVkBool;
 typedef uint32_t OpenVkBool;
 #define OpenVkTrue 1
 #define OpenVkFalse 0
@@ -12,7 +14,7 @@ typedef enum
 	OPENVK_DIRECTX_12 = 0x2,
 	OPENVK_RAYTRACING = 0x4,
 	OPENVK_VALIDATION_LAYER = 0x8,
-} OpenVkRendererFlags;
+} OpenVkRendererFlagOptions;
 
 typedef enum
 {
@@ -239,3 +241,123 @@ uint32_t OpenVkAlignedSize(uint32_t Value, uint32_t Alignment)
 {
 	return (Value + Alignment - 1) & ~(Alignment - 1);
 }
+
+void* OpenVkAlignedMalloc(size_t Size, size_t Alignment)
+{
+	void* Data = NULL;
+#if defined(_MSC_VER) || defined(__MINGW32__)
+	Data = _aligned_malloc(Size, Alignment);
+#else
+	int Res = posix_memalign(&Data, Alignment, Size);
+	if (Res != 0)
+		Data = nullptr;
+#endif
+	return Data;
+}
+
+void OpenVkAlignedFree(void* Data)
+{
+#if	defined(_MSC_VER) || defined(__MINGW32__)
+	_aligned_free(Data);
+#else
+	free(Data);
+#endif
+}
+
+/*
+Future useful code:
+uint32_t VkCreateTranformBuffer(VkTransformMatrixKHR Matrix, uint32_t* AllignedMatrixSize, VkTransformMatrixKHR** AllignedMatrix)
+{
+
+
+
+	uint64_t AtomSize = VkRenderer.PhysicalDeviceProperties.limits.nonCoherentAtomSize;
+	uint32_t AllignedSize = OpenVkAlignedSize(sizeof(VkTransformMatrixKHR), AtomSize);
+	VkTransformMatrixKHR* TransformMatrix = (VkTransformMatrixKHR*)OpenVkAlignedMalloc(sizeof(VkTransformMatrixKHR), AllignedSize);
+
+//	uint32_t SizeA = OpenVkAlignedSize(sizeof(VkTransformMatrixKHR), Size);
+
+	memcpy(TransformMatrix, &Matrix, sizeof(VkTransformMatrixKHR));
+
+	VkDynamicBufferInfo TranformBuffer;
+
+	for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+	//	if (VkCreateBuffer(AllignedSize, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, &TranformBuffer.Buffers[i], &TranformBuffer.BufferMemories[i]) == OPENVK_ERROR)
+	//		return OpenVkRuntimeError("Failed to create transform buffer");
+		if (VkCreateVkBufferExt(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+			VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+			sizeof(VkTransformMatrixKHR), &TransformMatrix, &TranformBuffer.Buffers[i], &TranformBuffer.BufferMemories[i]) == OPENVK_ERROR)
+			return OpenVkRuntimeError("Failed to create transform buffer");
+	//	if (VkCreateVkBufferExt(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
+	//		VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
+	//		AllignedSize, TransformMatrix, &TranformBuffer.Buffers[i], &TranformBuffer.BufferMemories[i]) == OPENVK_ERROR)
+	//		return OpenVkRuntimeError("Failed to create transform buffer");
+
+	if (AllignedMatrixSize != NULL)
+		*AllignedMatrixSize = AllignedSize;
+
+	if (AllignedMatrix != NULL)
+		*AllignedMatrix = TransformMatrix;
+	else
+	{
+		OpenVkAlignedFree(TransformMatrix);
+	}
+
+	return CMA_Push(&VkRenderer.DynamicBuffers, &TranformBuffer);
+}
+
+void RendererUpdate()
+{
+
+	UpdateFpsCamera(&CameraPos, &CameraDir, &CameraUp);
+
+	UniformBufferObject UBO;
+	UBO.viewInverse = LookAtMat4(CameraPos, Add3P(&CameraPos, &CameraDir), CameraUp);
+	UBO.projInverse = PerspectiveMat4((float)WindowWidth / WindowHeight, ToRadians(70.0), 0.01, 1000.0);
+	UBO.viewInverse = InverseMat4(UBO.viewInverse);
+	UBO.projInverse = InverseMat4(UBO.projInverse);
+	OpenVkUpdateBuffer(sizeof(UniformBufferObject), &UBO, UniformBuffer);
+
+//	VkTransformMatrixKHR Matrix =
+//	{
+//		1.0, 0.0, 0.0, 2.0 * sin(SDL_GetTicks() * 0.001),
+//		0.0, 2.0, 0.0, 0.0,
+//		0.0, 0.0, 1.0, 0.0
+//	};
+	
+	VkDynamicBufferInfo* BufferPTR = (VkDynamicBufferInfo*)CMA_GetAt(&VkRenderer.DynamicBuffers, TransformBuffer);
+
+//	uint64_t Size = VkRenderer.PhysicalDeviceProperties.limits.nonCoherentAtomSize;
+//	uint32_t SizeA = OpenVkAlignedSize(sizeof(VkTransformMatrixKHR), Size);
+//	printf("Size: %d %d\n", AllignedMatrixSize, sizeof(mat4));
+
+	mat4 Matrix =
+	{
+		1.0, 0.0, 0.0, 2.0 * sin(SDL_GetTicks() * 0.001),
+		0.0, 2.0, 0.0, 0.0,
+		0.0, 0.0, 1.0, 0.0,
+		0.0, 0.0, 0.0, 1.0
+	//	1, 0, 0, 0,
+	//	0, 1, 0, 0,
+	//	0, 0, 1, 0,
+	//	0, 0, 0, 0
+	};
+
+	void* Data;
+	vkMapMemory(VkRenderer.Device, BufferPTR->BufferMemories[VkRenderer.CurrentFrame], 0, AllignedMatrixSize, 0, &Data);
+	memcpy(Data, &Matrix, AllignedMatrixSize);
+
+
+	VkMappedMemoryRange MemoryRange;
+	MemoryRange.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
+	MemoryRange.pNext = NULL;
+	MemoryRange.memory = BufferPTR->BufferMemories[VkRenderer.CurrentFrame];
+	MemoryRange.offset = 0;
+	MemoryRange.size = AllignedMatrixSize;
+	vkFlushMappedMemoryRanges(VkRenderer.Device, 1, &MemoryRange);
+
+	vkUnmapMemory(VkRenderer.Device, BufferPTR->BufferMemories[VkRenderer.CurrentFrame]);
+	
+	//	OpenVkUpdateBuffer(sizeof(VkTransformMatrixKHR), &Matrix, TransformBuffer);
+}
+*/
