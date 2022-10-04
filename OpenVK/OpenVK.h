@@ -8,8 +8,32 @@
 //#define VK_NO_PROTOTYPES
 #include <vulkan/vulkan.h>
 
-#define STB_IMAGE_IMPLEMENTATION
+void* Malloc(size_t Size)
+{
+	printf("Malloc\n");
+	return malloc(Size);
+}
+
+void* Realloc(void* Data, size_t Size)
+{
+	printf("Realloc\n");
+	return realloc(Data, Size);
+}
+
+void Free(void* Data)
+{
+	printf("Free\n");
+	free(Data);
+}
+
+#define free Free
+#define realloc Realloc
+#define malloc Malloc
 #include "CMA.h"
+#undef free
+#undef realloc
+#undef malloc
+#define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 #include "OpenVK_Defines.h"
 #include "OpenVK_Helper.h"

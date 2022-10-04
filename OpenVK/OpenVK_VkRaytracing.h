@@ -46,6 +46,8 @@ typedef struct
 	VkPhysicalDeviceFeatures2 PhysicalDeviceFeatures2;
 
 	CMA_MemoryZone Geometry;
+	CMA_MemoryZone Instances;
+	VkAccelerationStructureInstanceKHR* InstanceStorage;
 
 	CMA_MemoryZone BottomLevelAS;
 	CMA_MemoryZone TopLevelAS;
@@ -69,6 +71,7 @@ void VkGetRaytracingFeatures(VkDeviceCreateInfo* DeviceCreateInfo)
 {
 	memset(&VkRaytracer, 0, sizeof(VkRaytracerInfo));
 	VkRaytracer.Geometry = CMA_Create(sizeof(VkRaytracingGeometryInfo));
+	VkRaytracer.Instances = CMA_Create(sizeof(VkAccelerationStructureInstanceKHR));
 	VkRaytracer.BottomLevelAS = CMA_Create(sizeof(VkAccelerationStructure));
 	VkRaytracer.TopLevelAS = CMA_Create(sizeof(VkAccelerationStructure));
 
@@ -337,7 +340,7 @@ uint32_t VkCreateBottomLevelAccelerationStructure(uint32_t GeometryCount, uint32
 	AccelerationStructureBuildGeometryInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
 	AccelerationStructureBuildGeometryInfo.pNext = NULL;
 	AccelerationStructureBuildGeometryInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
-	AccelerationStructureBuildGeometryInfo.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
+	AccelerationStructureBuildGeometryInfo.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR | VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR;
 	AccelerationStructureBuildGeometryInfo.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
 	AccelerationStructureBuildGeometryInfo.srcAccelerationStructure = 0;
 	AccelerationStructureBuildGeometryInfo.dstAccelerationStructure = 0;
@@ -377,7 +380,7 @@ uint32_t VkCreateBottomLevelAccelerationStructure(uint32_t GeometryCount, uint32
 	AccelerationBuildGeometryInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
 	AccelerationBuildGeometryInfo.pNext = NULL;
 	AccelerationBuildGeometryInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
-	AccelerationBuildGeometryInfo.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
+	AccelerationBuildGeometryInfo.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR | VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR;
 	AccelerationBuildGeometryInfo.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
 	AccelerationBuildGeometryInfo.srcAccelerationStructure = 0;
 	AccelerationBuildGeometryInfo.dstAccelerationStructure = BottomLevelAS.Handle;
@@ -409,55 +412,71 @@ uint32_t VkCreateBottomLevelAccelerationStructure(uint32_t GeometryCount, uint32
 	return CMA_Push(&VkRaytracer.BottomLevelAS, &BottomLevelAS);
 }
 
-uint32_t VkCreateInastance(VkTransformMatrixKHR Matrix, OpenVkBool FrontCCWCulling, uint32_t BottomLevelAccelerationStructure)
+uint32_t VkCreateInstance(VkTransformMatrixKHR Matrix, OpenVkBool FrontCCWCulling, uint32_t BottomLevelAccelerationStructure)
 {
-
-}
-
-OpenVkBool VkCreateTopLevelAccelerationStructure(OpenVkBool FrontCCWCulling, uint32_t GeometryCount, uint32_t* InGeometry, uint32_t BottomLevelAccelerationStructure)
-{
-	uint32_t IndexCount = 0;
-//	VkAccelerationStructureGeometryKHR* Geometry = (VkAccelerationStructureGeometryKHR*)OpenVkMalloc(GeometryCount * sizeof(VkAccelerationStructureGeometryKHR));
-
-	for (uint32_t i = 0; i < GeometryCount; i++)
-	{
-		VkRaytracingGeometryInfo* Geo = (VkRaytracingGeometryInfo*)CMA_GetAt(&VkRaytracer.Geometry, InGeometry[i]);
-		if (Geo != NULL)
-		{
-		//	Geometry[i] = Geo->AccelerationStructureGeometry;
-			IndexCount += Geo->IndexCount;
-		}
-	}
+	VkRaytracer.InstanceStorage = (VkAccelerationStructureInstanceKHR*)OpenVkRealloc(VkRaytracer.InstanceStorage, (VkRaytracer.Instances.Size + 1) * sizeof(VkAccelerationStructureInstanceKHR));
 
 	VkAccelerationStructure* BottomLevelAS = (VkAccelerationStructure*)CMA_GetAt(&VkRaytracer.BottomLevelAS, BottomLevelAccelerationStructure);
 	if (BottomLevelAS == NULL)
 		return OpenVkRuntimeError("Failed to find bottom level as");
 
-	GeometryCount = 1;
-
-	VkTransformMatrixKHR transformMatrix = 
-	{
-		1.0, 0.0, 0.0, 0.0,
-		0.0, 1.0, 0.0, 0.0,
-		0.0, 0.0, 1.0, 0.0 
-	};
-
 	VkAccelerationStructureInstanceKHR Instance;
-	Instance.transform = transformMatrix;
+	Instance.transform = Matrix;
 	Instance.instanceCustomIndex = 0;
 	Instance.mask = 0xFF;
 	Instance.instanceShaderBindingTableRecordOffset = 0;
 	Instance.flags = (FrontCCWCulling ? VK_GEOMETRY_INSTANCE_TRIANGLE_FRONT_COUNTERCLOCKWISE_BIT_KHR : VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR);
 	Instance.accelerationStructureReference = BottomLevelAS->DeviceAddress;
 
-	uint32_t InstancesPTR = VkCreateBufferExt(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-		VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-		sizeof(VkAccelerationStructureInstanceKHR), &Instance);
+	return CMA_Push(&VkRaytracer.Instances, &Instance);
+}
 
-	VkStaticBufferInfo* InstancesBuffer = (VkStaticBufferInfo*)CMA_GetAt(&VkRenderer.StaticBuffers, InstancesPTR);
+OpenVkBool VkUpdateInstance(VkTransformMatrixKHR Matrix, OpenVkBool FrontCCWCulling, uint32_t BottomLevelAccelerationStructure, uint32_t Instance)
+{
+	VkAccelerationStructureInstanceKHR* InstancePTR = (VkAccelerationStructureInstanceKHR*)CMA_GetAt(&VkRaytracer.Instances, Instance);
+	if (InstancePTR == NULL)
+		return OpenVkRuntimeError("Failed to find instance");
+
+	VkAccelerationStructure* BottomLevelAS = (VkAccelerationStructure*)CMA_GetAt(&VkRaytracer.BottomLevelAS, BottomLevelAccelerationStructure);
+	if (BottomLevelAS == NULL)
+		return OpenVkRuntimeError("Failed to find bottom level as");
+
+	InstancePTR->transform = Matrix;
+	InstancePTR->flags = (FrontCCWCulling ? VK_GEOMETRY_INSTANCE_TRIANGLE_FRONT_COUNTERCLOCKWISE_BIT_KHR : VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR);
+	InstancePTR->accelerationStructureReference = BottomLevelAS->DeviceAddress;
+
+	return OpenVkTrue;
+}
+
+typedef struct
+{
+	uint32_t	InsanceCount;
+	uint32_t*	Instances;
+	
+	OpenVkBool	Update; 
+	uint32_t*	OldTopLevelAS;
+} OpenVkTopLevelAccelerationStructureCreateInfo;
+
+OpenVkBool VkCreateTopLevelAccelerationStructure(uint32_t InstanceCount, uint32_t* Instances, OpenVkBool Update, uint32_t* OldTopLevelAS)
+{
+	uint32_t InstanceASCount = 0;
+
+	for (uint32_t i = 0; i < InstanceCount; i++)
+	{
+		VkAccelerationStructureInstanceKHR* Instance = (VkAccelerationStructureInstanceKHR*)CMA_GetAt(&VkRaytracer.Instances, Instances[i]);
+		if (Instance != NULL)
+		{
+			VkRaytracer.InstanceStorage[InstanceASCount++] = *Instance;
+		}
+	}
+
+	VkStaticBufferInfo InstancesBuffer;
+	VkCreateVkBufferExt(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+		VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+		InstanceASCount * sizeof(VkAccelerationStructureInstanceKHR), VkRaytracer.InstanceStorage, &InstancesBuffer.Buffer, &InstancesBuffer.BufferMemory);
 
 	VkDeviceOrHostAddressConstKHR InstanceDataDeviceAddress;
-	InstanceDataDeviceAddress.deviceAddress = VkGetBufferDeviceAddress(InstancesBuffer->Buffer);
+	InstanceDataDeviceAddress.deviceAddress = VkGetBufferDeviceAddress(InstancesBuffer.Buffer);
 
 	VkAccelerationStructureGeometryKHR AccelerationStructureGeometry;
 	memset(&AccelerationStructureGeometry, 0, sizeof(VkAccelerationStructureGeometryKHR));
@@ -475,18 +494,23 @@ OpenVkBool VkCreateTopLevelAccelerationStructure(OpenVkBool FrontCCWCulling, uin
 	AccelerationStructureBuildGeometryInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
 	AccelerationStructureBuildGeometryInfo.pNext = NULL;
 	AccelerationStructureBuildGeometryInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
-	AccelerationStructureBuildGeometryInfo.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
-	AccelerationStructureBuildGeometryInfo.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
+	AccelerationStructureBuildGeometryInfo.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR | VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR;
+	AccelerationStructureBuildGeometryInfo.mode = (Update ? VK_BUILD_ACCELERATION_STRUCTURE_MODE_UPDATE_KHR : VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR);
 	AccelerationStructureBuildGeometryInfo.srcAccelerationStructure = 0;
 	AccelerationStructureBuildGeometryInfo.dstAccelerationStructure = 0;
-	AccelerationStructureBuildGeometryInfo.geometryCount = GeometryCount;
+	AccelerationStructureBuildGeometryInfo.geometryCount = 1;
 	AccelerationStructureBuildGeometryInfo.pGeometries = &AccelerationStructureGeometry;
 	AccelerationStructureBuildGeometryInfo.ppGeometries = NULL;
 	AccelerationStructureBuildGeometryInfo.scratchData.deviceAddress = 0;
 
 	VkAccelerationStructure TopLevelAS;
+	if (Update)
+	{
+		VkAccelerationStructure* TLAS = (VkAccelerationStructure*)CMA_GetAt(&VkRaytracer.TopLevelAS, *OldTopLevelAS);
+		TopLevelAS = *TLAS;
+	}
 
-	const uint32_t PrimitiveCount = GeometryCount;
+	const uint32_t PrimitiveCount = InstanceCount;
 	VkAccelerationStructureBuildSizesInfoKHR AccelerationStructureBuildSizesInfo;
 	memset(&AccelerationStructureBuildSizesInfo, 0, sizeof(VkAccelerationStructureBuildSizesInfoKHR));
 	AccelerationStructureBuildSizesInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR;
@@ -498,36 +522,30 @@ OpenVkBool VkCreateTopLevelAccelerationStructure(OpenVkBool FrontCCWCulling, uin
 		&PrimitiveCount,
 		&AccelerationStructureBuildSizesInfo);
 
-	VkCreateAccelerationStructureBuffer(&TopLevelAS, AccelerationStructureBuildSizesInfo);
+	if (!Update)
+	{
+		VkCreateAccelerationStructureBuffer(&TopLevelAS, AccelerationStructureBuildSizesInfo);
 
-	VkAccelerationStructureCreateInfoKHR AccelerationStructureCreateInfo;
-	AccelerationStructureCreateInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR;
-	AccelerationStructureCreateInfo.pNext = NULL;
-	AccelerationStructureCreateInfo.createFlags = 0;
-	AccelerationStructureCreateInfo.buffer = TopLevelAS.Buffer;
-	AccelerationStructureCreateInfo.offset = 0;
-	AccelerationStructureCreateInfo.size = AccelerationStructureBuildSizesInfo.accelerationStructureSize;
-	AccelerationStructureCreateInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
-	AccelerationStructureCreateInfo.deviceAddress = 0;
-	KHR.vkCreateAccelerationStructure(VkRenderer.Device, &AccelerationStructureCreateInfo, NULL, &TopLevelAS.Handle);
+		VkAccelerationStructureCreateInfoKHR AccelerationStructureCreateInfo;
+		AccelerationStructureCreateInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR;
+		AccelerationStructureCreateInfo.pNext = NULL;
+		AccelerationStructureCreateInfo.createFlags = 0;
+		AccelerationStructureCreateInfo.buffer = TopLevelAS.Buffer;
+		AccelerationStructureCreateInfo.offset = 0;
+		AccelerationStructureCreateInfo.size = AccelerationStructureBuildSizesInfo.accelerationStructureSize;
+		AccelerationStructureCreateInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
+		AccelerationStructureCreateInfo.deviceAddress = 0;
+		KHR.vkCreateAccelerationStructure(VkRenderer.Device, &AccelerationStructureCreateInfo, NULL, &TopLevelAS.Handle);
+	}
 
 	VkRaytracingScratchBuffer scratchBuffer = VkCreateScratchBuffer(AccelerationStructureBuildSizesInfo.buildScratchSize);
 
-	VkAccelerationStructureBuildGeometryInfoKHR AccelerationBuildGeometryInfo;
-	AccelerationBuildGeometryInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
-	AccelerationBuildGeometryInfo.pNext = NULL;
-	AccelerationBuildGeometryInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
-	AccelerationBuildGeometryInfo.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
-	AccelerationBuildGeometryInfo.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
-	AccelerationBuildGeometryInfo.srcAccelerationStructure = 0;
-	AccelerationBuildGeometryInfo.dstAccelerationStructure = TopLevelAS.Handle;
-	AccelerationBuildGeometryInfo.geometryCount = GeometryCount;
-	AccelerationBuildGeometryInfo.pGeometries = &AccelerationStructureGeometry;
-	AccelerationBuildGeometryInfo.ppGeometries = NULL;
-	AccelerationBuildGeometryInfo.scratchData.deviceAddress = scratchBuffer.DeviceAddress;
+	AccelerationStructureBuildGeometryInfo.srcAccelerationStructure = (Update ? TopLevelAS.Handle : 0);
+	AccelerationStructureBuildGeometryInfo.dstAccelerationStructure = TopLevelAS.Handle;
+	AccelerationStructureBuildGeometryInfo.scratchData.deviceAddress = scratchBuffer.DeviceAddress;
 
 	VkAccelerationStructureBuildRangeInfoKHR AccelerationStructureBuildRangeInfo;
-	AccelerationStructureBuildRangeInfo.primitiveCount = GeometryCount;
+	AccelerationStructureBuildRangeInfo.primitiveCount = InstanceCount;
 	AccelerationStructureBuildRangeInfo.primitiveOffset = 0;
 	AccelerationStructureBuildRangeInfo.firstVertex = 0;
 	AccelerationStructureBuildRangeInfo.transformOffset = 0;
@@ -537,7 +555,7 @@ OpenVkBool VkCreateTopLevelAccelerationStructure(OpenVkBool FrontCCWCulling, uin
 	KHR.vkCmdBuildAccelerationStructures(
 		commandBuffer,
 		1,
-		&AccelerationBuildGeometryInfo,
+		&AccelerationStructureBuildGeometryInfo,
 		&AccelerationBuildStructureRangeInfos);
 	VkEndSingleTimeCommandBuffer(commandBuffer);
 
@@ -548,8 +566,12 @@ OpenVkBool VkCreateTopLevelAccelerationStructure(OpenVkBool FrontCCWCulling, uin
 	TopLevelAS.DeviceAddress = KHR.vkGetAccelerationStructureDeviceAddress(VkRenderer.Device, &AccelerationDeviceAddressInfo);
 	
 	VkDestroyScratchBuffer(&scratchBuffer);
-	VkDestroyBuffer(InstancesPTR);
-//	OpenVkFree(Geometry);
+	vkDestroyBuffer(VkRenderer.Device, InstancesBuffer.Buffer, NULL);
+	vkFreeMemory(VkRenderer.Device, InstancesBuffer.BufferMemory, NULL);
+
+	//Fix?
+	if (Update)
+		return VkRaytracer.TopLevelAS.Size - 1;
 
 	return CMA_Push(&VkRaytracer.TopLevelAS, &TopLevelAS);
 }
@@ -727,4 +749,5 @@ void VkDestroyRaytracing()
 	CMA_Destroy(&VkRaytracer.TopLevelAS);
 	CMA_Destroy(&VkRaytracer.Geometry);
 	OpenVkFree(VkRaytracer.ShaderBindings);
+	OpenVkFree(VkRaytracer.InstanceStorage);
 }
