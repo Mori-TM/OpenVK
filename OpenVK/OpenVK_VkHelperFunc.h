@@ -332,33 +332,6 @@ VkCommandBuffer VkBeginSingleTimeCommands()
 	return CommandBuffer;
 }
 
-OpenVkBool VkEndSingleTimeCommandBufferOld(VkCommandBuffer CommandBuffer)
-{
-	if (vkEndCommandBuffer(CommandBuffer) != VK_SUCCESS)
-		return OpenVkRuntimeError("Failed to end single time command buffer");
-
-	VkSubmitInfo SubmitInfo;
-	SubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-	SubmitInfo.pNext = NULL;
-	SubmitInfo.waitSemaphoreCount = 0;
-	SubmitInfo.pWaitSemaphores = NULL;
-	SubmitInfo.pWaitDstStageMask = NULL;
-	SubmitInfo.commandBufferCount = 1;
-	SubmitInfo.pCommandBuffers = &CommandBuffer;
-	SubmitInfo.signalSemaphoreCount = 0;
-	SubmitInfo.pSignalSemaphores = NULL;
-
-	if (vkQueueSubmit(VkRenderer.GraphicsQueue, 1, &SubmitInfo, 0) != VK_SUCCESS)
-		return OpenVkRuntimeError("Failed to submit single time command buffer queue");
-
-	if (vkQueueWaitIdle(VkRenderer.GraphicsQueue) != VK_SUCCESS)
-		return OpenVkRuntimeError("Failed to wait for single time command buffer queue");
-
-	vkFreeCommandBuffers(VkRenderer.Device, VkRenderer.CommandPool, 1, &CommandBuffer);
-
-	return OpenVkTrue;
-}
-
 OpenVkBool VkEndSingleTimeCommandBuffer(VkCommandBuffer CommandBuffer)
 {
 	if (vkEndCommandBuffer(CommandBuffer) != VK_SUCCESS)

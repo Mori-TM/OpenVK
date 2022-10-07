@@ -1,3 +1,4 @@
+#define OPENVK_FRAMEWORK
 #define _CRT_SECURE_NO_WARNINGS
 #include <stdio.h>
 #include <stdlib.h>
@@ -26,13 +27,13 @@ void Free(void* Data)
 	free(Data);
 }
 
-#define free Free
-#define realloc Realloc
-#define malloc Malloc
+//#define free Free
+//#define realloc Realloc
+//#define malloc Malloc
 #include "CMA.h"
-#undef free
-#undef realloc
-#undef malloc
+//#undef free
+//#undef realloc
+//#undef malloc
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 #include "OpenVK_Defines.h"

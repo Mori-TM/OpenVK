@@ -1919,10 +1919,10 @@ void VkDestroyRenderer()
 			vkFreeMemory(VkRenderer.Device, Image->ImageMemory, NULL);
 		}		
 	}
-
+	
 	if (OpenVkRendererFlags & OPENVK_RAYTRACING)
 		VkDestroyRaytracing();
-
+	
 //	OpenVkFree(VkRenderer.TextureImageViews);
 //	OpenVkFree(VkRenderer.Images);
 //	OpenVkFree(VkRenderer.TextureImageMemories);

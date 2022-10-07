@@ -99,6 +99,11 @@ typedef enum
 
 typedef struct
 {
+	float Matrix[3][4];
+} OpenVkTransformMatrix;
+
+typedef struct
+{
 	OpenVkBool	Dynamic;
 	uint32_t	DescriptorPool;
 } OpenVkDescriptorPool;
