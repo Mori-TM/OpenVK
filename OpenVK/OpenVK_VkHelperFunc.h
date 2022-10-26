@@ -1,4 +1,4 @@
-#define MAX_FRAMES_IN_FLIGHT 1
+#define MAX_FRAMES_IN_FLIGHT 3
 
 typedef struct
 {
@@ -7,8 +7,8 @@ typedef struct
 
 typedef struct
 {
-	uint32_t DescriptorPoolCount;
-	VkDescriptorPool* DescriptorPools;
+	VkDescriptorPool DescriptorPool;
+	CMA_MemoryZone DescriptorSets;
 } VkDescriptorPoolInfo;
 
 typedef struct
@@ -115,8 +115,9 @@ typedef struct
 
 	VkSampleCountFlagBits MsaaSamples;
 
-	VkDescriptorPoolInfo DynamicDescriptorPools;
-	VkDescriptorPoolInfo StaticDescriptorPools;
+	CMA_MemoryZone DescriptorPools;
+//	VkDescriptorPoolInfo DynamicDescriptorPools;
+//	VkDescriptorPoolInfo StaticDescriptorPools;
 
 	VkPhysicalDeviceProperties PhysicalDeviceProperties;
 	VkPhysicalDeviceFeatures PhysicalDeviceFeatures;
@@ -546,6 +547,7 @@ VkFormat VkFindDepthFormat()
 	return VkFindSupportedFormat(Formats, 3, VK_IMAGE_TILING_OPTIMAL, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
 }
 
+//wtf?
 VkDescriptorSetAllocateInfo VkAllocateDescriptorSets(VkDescriptorPool DescriptorPool, uint32_t Count, VkDescriptorSetLayout* SetLayouts)
 {
 	VkDescriptorSetAllocateInfo AllocateInfo;

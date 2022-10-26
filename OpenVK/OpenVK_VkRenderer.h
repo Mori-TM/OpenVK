@@ -130,6 +130,7 @@ uint32_t VkCreateRenderer(const char**(*GetExtensions)(uint32_t* ExtensionCount)
 	VkRenderer.Sampler = CMA_Create(sizeof(VkSampler));
 	VkRenderer.StaticBuffers = CMA_Create(sizeof(VkStaticBufferInfo));
 	VkRenderer.DynamicBuffers = CMA_Create(sizeof(VkDynamicBufferInfo));
+	VkRenderer.DescriptorPools = CMA_Create(sizeof(VkDescriptorPoolInfo));
 
 	//Instance
 	VkApplicationInfo AppInfo;
@@ -915,8 +916,7 @@ uint32_t VkCreateDescriptorSetLayout(uint32_t BindingCount, uint32_t* Bindings, 
 		return OpenVkRuntimeError("Failed to Create Descriptor Set Layout");
 	OpenVkFree(LayoutBindings);
 
-	VkRenderer.DescriptorSetLayoutCount++;
-	return VkRenderer.DescriptorSetLayoutCount - 1;
+	return VkRenderer.DescriptorSetLayoutCount++;
 }
 
 //DescriptorTypes
@@ -926,22 +926,14 @@ uint32_t VkCreateDescriptorSetLayout(uint32_t BindingCount, uint32_t* Bindings, 
 //Pool Types
 //0 = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER
 //1 = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE
-OpenVkDescriptorPool VkCreateDescriptorPool(uint32_t PoolSizeCount, uint32_t* DescriptorTypes, uint32_t* DescriptorCounts, OpenVkBool Dynamic)
+uint32_t VkCreateDescriptorPool(uint32_t DescriptorPoolType, uint32_t PoolSizeCount, uint32_t* DescriptorTypes, uint32_t* DescriptorCounts)
 {
-	if (Dynamic)
-		VkRenderer.DynamicDescriptorPools.DescriptorPools = (VkDescriptorPool*)OpenVkRealloc(VkRenderer.DynamicDescriptorPools.DescriptorPools, (VkRenderer.DynamicDescriptorPools.DescriptorPoolCount + 1) * sizeof(VkDescriptorPool));
-	else
-		VkRenderer.StaticDescriptorPools.DescriptorPools = (VkDescriptorPool*)OpenVkRealloc(VkRenderer.StaticDescriptorPools.DescriptorPools, (VkRenderer.StaticDescriptorPools.DescriptorPoolCount + 1) * sizeof(VkDescriptorPool));
-
 	uint32_t MaxSets = 0;
 
 	VkDescriptorPoolSize* PoolSizes = (VkDescriptorPoolSize*)OpenVkMalloc(PoolSizeCount * sizeof(VkDescriptorPoolSize));
 
 	for (uint32_t i = 0; i < PoolSizeCount; i++)
 	{
-	//	if (DescriptorTypes[i] == 0) PoolSizes[i].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-	//	if (DescriptorTypes[i] == 1) PoolSizes[i].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
-	//	if (DescriptorTypes[i] == 2) PoolSizes[i].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 		if (DescriptorTypes[i] == OPENVK_DESCRIPTOR_TYPE_UNIFORM_BUFFER)			PoolSizes[i].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 		if (DescriptorTypes[i] == OPENVK_DESCRIPTOR_TYPE_DYNAMIC_UNIFORM_BUFFER)	PoolSizes[i].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
 		if (DescriptorTypes[i] == OPENVK_DESCRIPTOR_TYPE_IMAGE_SAMPLER)				PoolSizes[i].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -955,87 +947,70 @@ OpenVkDescriptorPool VkCreateDescriptorPool(uint32_t PoolSizeCount, uint32_t* De
 	VkDescriptorPoolCreateInfo PoolInfo;
 	PoolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
 	PoolInfo.pNext = NULL;
-	if (Dynamic)
-	{
-		PoolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
-		PoolInfo.maxSets = 512 * MaxSets * MAX_FRAMES_IN_FLIGHT;
-	}
-	else
-	{
-		PoolInfo.flags = 0;
-		PoolInfo.maxSets = MaxSets * MAX_FRAMES_IN_FLIGHT;	//maximum number of descriptor sets that may be allocated
-	}	
+	PoolInfo.maxSets = MaxSets * MAX_FRAMES_IN_FLIGHT;	//maximum number of descriptor sets that may be allocated
+	if (DescriptorPoolType == OPENVK_DESCRIPTOR_POOL_DEFAULT)	PoolInfo.flags = 0;
+	if (DescriptorPoolType == OPENVK_DESCRIPTOR_POOL_FREEABLE)	PoolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+	if (DescriptorPoolType == OPENVK_DESCRIPTOR_POOL_UPDATABLE)	PoolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT;
 	PoolInfo.poolSizeCount = PoolSizeCount;
 	PoolInfo.pPoolSizes = PoolSizes;
 
-	OpenVkDescriptorPool Pool;
-	Pool.DescriptorPool = 0;
-	Pool.Dynamic = Dynamic;
+	VkDescriptorPoolInfo DescriptorPool;
+	DescriptorPool.DescriptorSets = CMA_Create(sizeof(uint32_t));
 
-	if (Dynamic)
+	if (vkCreateDescriptorPool(VkRenderer.Device, &PoolInfo, NULL, &DescriptorPool.DescriptorPool) != VK_SUCCESS)
 	{
-		if (vkCreateDescriptorPool(VkRenderer.Device, &PoolInfo, NULL, &VkRenderer.DynamicDescriptorPools.DescriptorPools[VkRenderer.DynamicDescriptorPools.DescriptorPoolCount]) != VK_SUCCESS)
-		{
-			Pool.DescriptorPool = OpenVkRuntimeError("Failed to Create Dynamic Descriptor Pool");
-			return Pool;
-		}
-			
-
 		OpenVkFree(PoolSizes);
-
-		VkRenderer.DynamicDescriptorPools.DescriptorPoolCount++;
-		Pool.DescriptorPool = VkRenderer.DynamicDescriptorPools.DescriptorPoolCount - 1;
-		
-	}
-	else
-	{
-		if (vkCreateDescriptorPool(VkRenderer.Device, &PoolInfo, NULL, &VkRenderer.StaticDescriptorPools.DescriptorPools[VkRenderer.StaticDescriptorPools.DescriptorPoolCount]) != VK_SUCCESS)
-		{
-			Pool.DescriptorPool = OpenVkRuntimeError("Failed to Create static Descriptor Pool");
-			return Pool;
-		}
-			
-
-		OpenVkFree(PoolSizes);
-
-		VkRenderer.StaticDescriptorPools.DescriptorPoolCount++;
-		Pool.DescriptorPool = VkRenderer.StaticDescriptorPools.DescriptorPoolCount - 1;
+		return OpenVkRuntimeError("Failed to create descriptor pool");
 	}
 
-	return Pool;
+	OpenVkFree(PoolSizes);
+	return CMA_Push(&VkRenderer.DescriptorPools, &DescriptorPool);
 }
 
-//DescriptorTypes
-//Uniform Buffer = 0
-//Dynamic Uniform Buffer = 1
-//Image Sampler = 2
-//ImageTypes
-//Texture Image = 0
-//Attachment Image = 1
-//ImageLayouts
-//Color Out = 0
-//Depth Out = 1
-uint32_t VkCreateDescriptorSet(OpenVkDescriptorSetCreateInfo* Info)
+//just works if descriptor pool is created "Freeable"
+OpenVkBool VkFreeDescriptorSet(uint32_t DescriptorPool, uint32_t DescriptorSet)
 {
-//	VkRenderer.DescriptorSets = (VkDescriptorSetInfo*)OpenVkRealloc(VkRenderer.DescriptorSets, (VkRenderer.DescriptorSetCount + 1) * sizeof(VkDescriptorSetInfo));
+	VkDescriptorPoolInfo* DescriptorPoolPTR = (VkDescriptorPoolInfo*)CMA_GetAt(&VkRenderer.DescriptorPools, DescriptorPool);
+	if (DescriptorPoolPTR == NULL)
+		return OpenVkRuntimeError("Failed to find descriptor pool");
 
-	VkDescriptorSetInfo DescriptorSetInfo;
+	VkDescriptorSetInfo* DescriptorSetPTR = (VkDescriptorSetInfo*)CMA_GetAt(&VkRenderer.DescriptorSets, DescriptorSet);
+	if (DescriptorSetPTR == NULL)
+		return OpenVkRuntimeError("Failed find descriptor set");
 
-	VkDescriptorSetLayout DescriptorSetLayouts[MAX_FRAMES_IN_FLIGHT];
-	for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
-		DescriptorSetLayouts[i] = VkRenderer.DescriptorSetLayouts[Info->DescriptorSetLayout];
+	vkFreeDescriptorSets(VkRenderer.Device, DescriptorPoolPTR->DescriptorPool, MAX_FRAMES_IN_FLIGHT, DescriptorSetPTR->DescriptorSets);
+	CMA_Pop(&VkRenderer.DescriptorSets, DescriptorSet);
 
-	VkDescriptorSetAllocateInfo AllocateInfo;
-	if (Info->DescriptorPool.Dynamic)
-		AllocateInfo = VkAllocateDescriptorSets(VkRenderer.DynamicDescriptorPools.DescriptorPools[Info->DescriptorPool.DescriptorPool], MAX_FRAMES_IN_FLIGHT, DescriptorSetLayouts);
-	else
-		AllocateInfo = VkAllocateDescriptorSets(VkRenderer.StaticDescriptorPools.DescriptorPools[Info->DescriptorPool.DescriptorPool], MAX_FRAMES_IN_FLIGHT, DescriptorSetLayouts);
+	return OpenVkTrue;
+}
 
-	if (vkAllocateDescriptorSets(VkRenderer.Device, &AllocateInfo, DescriptorSetInfo.DescriptorSets) != VK_SUCCESS)
-		return OpenVkRuntimeError("Failed to Allocate Descriptor Set");
+OpenVkBool VkDestroyDescriptorPool(uint32_t DescriptorPool)
+{
+	VkDescriptorPoolInfo* DescriptorPoolPTR = (VkDescriptorPoolInfo*)CMA_GetAt(&VkRenderer.DescriptorPools, DescriptorPool);
+	if (DescriptorPoolPTR == NULL)
+		return OpenVkRuntimeError("Failed to destroy descriptor pool");
+
+	for (uint32_t i = 0; i < DescriptorPoolPTR->DescriptorSets.Size; i++)
+	{
+		uint32_t* DescriptorSetPTR = (uint32_t*)CMA_GetAt(&DescriptorPoolPTR->DescriptorSets, i);
+		CMA_Pop(&VkRenderer.DescriptorSets, *DescriptorSetPTR);
+	}		
+
+	vkDestroyDescriptorPool(VkRenderer.Device, DescriptorPoolPTR->DescriptorPool, NULL);
+
+	CMA_Pop(&VkRenderer.DescriptorPools, DescriptorPool);
+
+	return OpenVkTrue;
+}
+
+uint32_t VkUpdateDescriptorSet(OpenVkDescriptorSetCreateInfo* Info)
+{
+	VkDescriptorSetInfo* DescriptorSetInfo = (VkDescriptorSetInfo*)CMA_GetAt(&VkRenderer.DescriptorSets, *Info->DescriptorSet);
+	if (DescriptorSetInfo == NULL)
+		return OpenVkRuntimeError("Failed to find update descriptor set");
 
 	VkWriteDescriptorSet* DescriptorWrites = (VkWriteDescriptorSet*)OpenVkMalloc(Info->DescriptorWriteCount * sizeof(VkWriteDescriptorSet));
-	
+
 	VkDescriptorBufferInfo* DescriptorBufferInfos = NULL;
 	VkDescriptorImageInfo* DescriptorImageInfos = NULL;
 	VkWriteDescriptorSetAccelerationStructureKHR* DescriptorASInfos = NULL;
@@ -1063,30 +1038,13 @@ uint32_t VkCreateDescriptorSet(OpenVkDescriptorSetCreateInfo* Info)
 					DescriptorBufferInfos[m].offset = 0;
 					DescriptorBufferInfos[m].range = Info->UniformBufferSizes[m];
 				}
-				
+
 				if (Info->DescriptorTypes[i] == OPENVK_DESCRIPTOR_TYPE_UNIFORM_BUFFER)
-					DescriptorWrites[i] = VkDescriptorSetWrite(DescriptorSetInfo.DescriptorSets[j], Info->Bindings[i], VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, Info->DescriptorCounts[i], NULL, DescriptorBufferInfos, NULL);
+					DescriptorWrites[i] = VkDescriptorSetWrite(DescriptorSetInfo->DescriptorSets[j], Info->Bindings[i], VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, Info->DescriptorCounts[i], NULL, DescriptorBufferInfos, NULL);
 				if (Info->DescriptorTypes[i] == OPENVK_DESCRIPTOR_TYPE_DYNAMIC_UNIFORM_BUFFER)
-					DescriptorWrites[i] = VkDescriptorSetWrite(DescriptorSetInfo.DescriptorSets[j], Info->Bindings[i], VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, Info->DescriptorCounts[i], NULL, DescriptorBufferInfos, NULL);
+					DescriptorWrites[i] = VkDescriptorSetWrite(DescriptorSetInfo->DescriptorSets[j], Info->Bindings[i], VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, Info->DescriptorCounts[i], NULL, DescriptorBufferInfos, NULL);
 			}
-			/*
-			if (Info->DescriptorTypes[i] == OPENVK_DESCRIPTOR_TYPE_DYNAMIC_UNIFORM_BUFFER)
-			{
-				//Dynamic Uniform
-				if (DescriptorBufferInfos != NULL) OpenVkFree(DescriptorBufferInfos);
-				DescriptorBufferInfos = (VkDescriptorBufferInfo*)OpenVkMalloc(Info->DescriptorCounts[i] * sizeof(VkDescriptorBufferInfo));
-
-				for (uint32_t m = 0; m < Info->DescriptorCounts[i]; m++)
-				{
-					DescriptorBufferInfos[m].buffer = VkRenderer.UniformBuffers[Info->UniformBuffers[m]].Buffers[j];
-					DescriptorBufferInfos[m].offset = 0;
-					DescriptorBufferInfos[m].range = Info->UniformBufferSizes[m];
-				}
-
-				DescriptorWrites[i] = VkDescriptorSetWrite(DescriptorSetInfo.DescriptorSets[j], Info->Bindings[i], VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, Info->DescriptorCounts[i], NULL, DescriptorBufferInfos, NULL);
-			}
-			*/
-			if (Info->DescriptorTypes[i] == OPENVK_DESCRIPTOR_TYPE_IMAGE_SAMPLER || 
+			if (Info->DescriptorTypes[i] == OPENVK_DESCRIPTOR_TYPE_IMAGE_SAMPLER ||
 				Info->DescriptorTypes[i] == OPENVK_DESCRIPTOR_TYPE_STORAGE_IMAGE)
 			{
 				//image
@@ -1095,34 +1053,6 @@ uint32_t VkCreateDescriptorSet(OpenVkDescriptorSetCreateInfo* Info)
 
 				for (uint32_t m = 0; m < Info->DescriptorCounts[i]; m++)
 				{
-					/*
-					VkSampler* ImageSampler = (VkSampler*)CMA_GetAt(&VkRenderer.Sampler, Info->Sampler[m]);
-					if (ImageSampler != NULL)
-						DescriptorImageInfos[m].sampler = *ImageSampler;
-					else
-						return OpenVkRuntimeError("Failed to find sampler");
-
-					if (Info->ImageTypes[m] == 0)
-					{
-						VkImageInfo* TextureImage = (VkImageInfo*)CMA_GetAt(&VkRenderer.Images, Info->Images[m]);
-						if (TextureImage != NULL)
-							DescriptorImageInfos[m].imageView = TextureImage->ImageView;
-						else
-						{
-							OpenVkFree(DescriptorWrites);
-							if (DescriptorBufferInfos != NULL) OpenVkFree(DescriptorBufferInfos);
-							if (DescriptorImageInfos != NULL) OpenVkFree(DescriptorImageInfos);
-
-							return OpenVkRuntimeError("Failed to Find Texture Image View this can be ok");
-						}							
-					}
-					if (Info->ImageTypes[m] == 1) 
-					{
-						VkImageInfo* ImageView = (VkImageInfo*)CMA_GetAt(&VkRenderer.ImageAttachments, Info->Images[m]);
-						DescriptorImageInfos[m].imageView = ImageView->ImageView;
-					//	DescriptorImageInfos[m].imageView = VkRenderer.ImageViews[Info->Images[m]];//[j]?
-					}
-					*/
 					if (Info->ImageTypes[m] == OPENVK_IMAGE_TYPE_TEXTURE)
 					{
 						VkSampler* ImageSampler = (VkSampler*)CMA_GetAt(&VkRenderer.Sampler, Info->Sampler[m]);
@@ -1158,9 +1088,9 @@ uint32_t VkCreateDescriptorSet(OpenVkDescriptorSetCreateInfo* Info)
 				}
 
 				if (Info->DescriptorTypes[i] == OPENVK_DESCRIPTOR_TYPE_IMAGE_SAMPLER)
-					DescriptorWrites[i] = VkDescriptorSetWrite(DescriptorSetInfo.DescriptorSets[j], Info->Bindings[i], VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, Info->DescriptorCounts[i], DescriptorImageInfos, NULL, NULL);
+					DescriptorWrites[i] = VkDescriptorSetWrite(DescriptorSetInfo->DescriptorSets[j], Info->Bindings[i], VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, Info->DescriptorCounts[i], DescriptorImageInfos, NULL, NULL);
 				if (Info->DescriptorTypes[i] == OPENVK_DESCRIPTOR_TYPE_STORAGE_IMAGE)
-					DescriptorWrites[i] = VkDescriptorSetWrite(DescriptorSetInfo.DescriptorSets[j], Info->Bindings[i], VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, Info->DescriptorCounts[i], DescriptorImageInfos, NULL, NULL);
+					DescriptorWrites[i] = VkDescriptorSetWrite(DescriptorSetInfo->DescriptorSets[j], Info->Bindings[i], VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, Info->DescriptorCounts[i], DescriptorImageInfos, NULL, NULL);
 			}
 			if (Info->DescriptorTypes[i] == OPENVK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE)
 			{
@@ -1169,25 +1099,18 @@ uint32_t VkCreateDescriptorSet(OpenVkDescriptorSetCreateInfo* Info)
 
 				for (uint32_t m = 0; m < Info->DescriptorCounts[i]; m++)
 				{
-				//	DescriptorASInfos[m].buffer = VkRenderer.UniformBuffers[Info->UniformBuffers[m]].Buffers[j];
-				//	DescriptorASInfos[m].offset = 0;
-				//	DescriptorASInfos[m].range = Info->UniformBufferSizes[m];
+					//	DescriptorASInfos[m].buffer = VkRenderer.UniformBuffers[Info->UniformBuffers[m]].Buffers[j];
+					//	DescriptorASInfos[m].offset = 0;
+					//	DescriptorASInfos[m].range = Info->UniformBufferSizes[m];
 					DescriptorASInfos[m].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR;
 					DescriptorASInfos[m].pNext = NULL;
 					DescriptorASInfos[m].accelerationStructureCount = 1;
 					VkAccelerationStructure* AS = (VkAccelerationStructure*)CMA_GetAt(&VkRaytracer.TopLevelAS, Info->TopLevelAS[m]);
-					if (AS == NULL)
-					{
-						OpenVkFree(DescriptorWrites);
-						if (DescriptorBufferInfos != NULL) OpenVkFree(DescriptorBufferInfos);
-						if (DescriptorImageInfos != NULL) OpenVkFree(DescriptorImageInfos);
-
-						return OpenVkRuntimeError("Failed to find top level as");
-					}
-					DescriptorASInfos[m].pAccelerationStructures = &AS->Handle;
+					if (AS != NULL)	DescriptorASInfos[m].pAccelerationStructures = &AS->Handle;
+					else Failed = OpenVkTrue;
 				}
 
-				DescriptorWrites[i] = VkDescriptorSetWrite(DescriptorSetInfo.DescriptorSets[j], Info->Bindings[i], VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, Info->DescriptorCounts[i], NULL, NULL, DescriptorASInfos);
+				DescriptorWrites[i] = VkDescriptorSetWrite(DescriptorSetInfo->DescriptorSets[j], Info->Bindings[i], VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, Info->DescriptorCounts[i], NULL, NULL, DescriptorASInfos);
 			}
 
 			if (Failed)
@@ -1196,7 +1119,7 @@ uint32_t VkCreateDescriptorSet(OpenVkDescriptorSetCreateInfo* Info)
 				if (DescriptorBufferInfos != NULL) OpenVkFree(DescriptorBufferInfos);
 				if (DescriptorImageInfos != NULL) OpenVkFree(DescriptorImageInfos);
 
-				return OpenVkRuntimeError("Failed to desscriptor stuff");
+				return OpenVkRuntimeError("Failed to descriptor stuff");
 			}
 		}
 
@@ -1208,62 +1131,36 @@ uint32_t VkCreateDescriptorSet(OpenVkDescriptorSetCreateInfo* Info)
 	if (DescriptorImageInfos != NULL) OpenVkFree(DescriptorImageInfos);
 	if (DescriptorASInfos != NULL) OpenVkFree(DescriptorASInfos);
 
-	return CMA_Push(&VkRenderer.DescriptorSets, &DescriptorSetInfo);
+	return *Info->DescriptorSet;
 }
 
-void VkUpdateDescriptorSet(uint32_t DescriptorSetLayout, OpenVkBool DynamicDescriptorPool, uint32_t DescriptorPool, uint32_t DescriptorCount, uint32_t* DescriptorTypes,
-						   uint32_t* UniformBuffers, uint64_t* UniformBufferSizes, uint32_t* Sampler, uint32_t* ImageTypes, 
-						   uint32_t* Images, uint32_t* ImageLayouts, uint32_t* Bindings, uint32_t DescriptorSet)
+uint32_t VkCreateDescriptorSet(OpenVkDescriptorSetCreateInfo* Info)
 {
-	/*
-	VkWriteDescriptorSet* DescriptorWrites = (VkWriteDescriptorSet*)OpenVkMalloc(DescriptorCount * sizeof(VkWriteDescriptorSet));
-
-	VkDescriptorBufferInfo BufferInfo;
-	VkDescriptorImageInfo ImageInfo;
-
-	for (uint32_t j = 0; j < MAX_FRAMES_IN_FLIGHT; j++)
+	if (Info->DescriptorSet == NULL)
 	{
-		uint32_t UniformCount = 0;
-		uint32_t ImageCount = 0;
+		VkDescriptorSetInfo DescriptorSetInfo;
 
-	//	for (uint32_t i = 0; i < DescriptorCount; i++)
-		{
-			if (DescriptorTypes[i] == 0)
-			{
-				BufferInfo.buffer = VkRenderer.UniformBuffers[UniformBuffers[UniformCount]].Buffers[j];
-				BufferInfo.offset = 0;
-				BufferInfo.range = UniformBufferSizes[UniformCount];
+		VkDescriptorSetLayout DescriptorSetLayouts[MAX_FRAMES_IN_FLIGHT];
+		for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+			DescriptorSetLayouts[i] = VkRenderer.DescriptorSetLayouts[Info->DescriptorSetLayout];
 
-				DescriptorWrites[i] = VkDescriptorSetWrite(VkRenderer.DescriptorSets[DescriptorSet].DescriptorSets[j], Bindings[i], VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, NULL, &BufferInfo);
-				UniformCount++;
-			}
-			if (DescriptorTypes[i] == 1)
-			{
-				BufferInfo.buffer = VkRenderer.UniformBuffers[UniformBuffers[UniformCount]].Buffers[j];
-				BufferInfo.offset = 0;
-				BufferInfo.range = UniformBufferSizes[UniformCount];
+		VkDescriptorSetAllocateInfo AllocateInfo;
 
-				DescriptorWrites[i] = VkDescriptorSetWrite(VkRenderer.DescriptorSets[DescriptorSet].DescriptorSets[j], Bindings[i], VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, NULL, &BufferInfo);
-				UniformCount++;
-			}
-			if (DescriptorTypes[i] == 2)
-			{
-				ImageInfo.sampler = VkRenderer.Sampler[Sampler[ImageCount]];
-				if (ImageTypes[ImageCount] == 0) ImageInfo.imageView = VkRenderer.TextureImageViews[Images[ImageCount]];
-				if (ImageTypes[ImageCount] == 1) ImageInfo.imageView = VkRenderer.Images[Images[ImageCount]].ImageViews[0];//[j]?
-				if (ImageLayouts[ImageCount] == 0) ImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-				if (ImageLayouts[ImageCount] == 1) ImageInfo.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+		VkDescriptorPoolInfo* DescriptorPoolPTR = (VkDescriptorPoolInfo*)CMA_GetAt(&VkRenderer.DescriptorPools, Info->DescriptorPool);
+		if (DescriptorPoolPTR == NULL)
+			return OpenVkRuntimeError("Failed to find descriptor pool");
 
-				DescriptorWrites[i] = VkDescriptorSetWrite(VkRenderer.DescriptorSets[DescriptorSet].DescriptorSets[j], Bindings[i], VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &ImageInfo, NULL);
-				ImageCount++;
-			}
-		}
+		AllocateInfo = VkAllocateDescriptorSets(DescriptorPoolPTR->DescriptorPool, MAX_FRAMES_IN_FLIGHT, DescriptorSetLayouts);
 
-		vkUpdateDescriptorSets(VkRenderer.Device, DescriptorCount, DescriptorWrites, 0, NULL);
+		if (vkAllocateDescriptorSets(VkRenderer.Device, &AllocateInfo, DescriptorSetInfo.DescriptorSets) != VK_SUCCESS)
+			return OpenVkRuntimeError("Failed to Allocate Descriptor Set");
+
+		uint32_t DescriptorSetPTR = CMA_Push(&VkRenderer.DescriptorSets, &DescriptorSetInfo);
+		CMA_Push(&DescriptorPoolPTR->DescriptorSets, &DescriptorSetPTR);
+		Info->DescriptorSet = &DescriptorSetPTR;
 	}	
-
-	OpenVkFree(DescriptorWrites);
-	*/
+	
+	return VkUpdateDescriptorSet(Info);
 }
 
 OpenVkBool VkDrawFrame(void (*RenderFunc)(void), void (*ResizeFunc)(void), void (*UpdateFunc)(void))
@@ -1838,9 +1735,6 @@ void VkCleanupSwapChain()
 	for (uint32_t i = 0; i < VkRenderer.RenderPassCount; i++)
 		vkDestroyRenderPass(VkRenderer.Device, VkRenderer.RenderPasses[i], NULL);
 
-	for (uint32_t i = 0; i < VkRenderer.StaticDescriptorPools.DescriptorPoolCount; i++)
-		vkDestroyDescriptorPool(VkRenderer.Device, VkRenderer.StaticDescriptorPools.DescriptorPools[i], NULL);
-
 	vkFreeCommandBuffers(VkRenderer.Device, VkRenderer.CommandPool, VkRenderer.SwapChainImageCount, VkRenderer.CommandBuffers);
 	OpenVkFree(VkRenderer.CommandBuffers);
 
@@ -1856,10 +1750,6 @@ void VkRecreateSwapChain(uint32_t* Width, uint32_t* Height)
 	VkRenderer.RenderPassCount = 0;
 	VkRenderer.FramebufferCount = 0;
 //	VkRenderer.DescriptorSetCount = 0;
-	VkRenderer.StaticDescriptorPools.DescriptorPoolCount = 0;
-
-	CMA_Destroy(&VkRenderer.DescriptorSets);
-	VkRenderer.DescriptorSets = CMA_Create(sizeof(VkDescriptorSetInfo));
 
 	VkCreateSwapChain(Width, Height);
 	VkCreateCommandBuffers();
@@ -1878,8 +1768,10 @@ void VkDestroyRenderer()
 
 	VkCleanupSwapChain();
 
-	for (uint32_t i = 0; i < VkRenderer.DynamicDescriptorPools.DescriptorPoolCount; i++)
-		vkDestroyDescriptorPool(VkRenderer.Device, VkRenderer.DynamicDescriptorPools.DescriptorPools[i], NULL);
+	for (uint32_t i = 0; i < VkRenderer.DescriptorPools.Size; i++)
+		VkDestroyDescriptorPool(i);
+
+	CMA_Destroy(&VkRenderer.DescriptorPools);
 
 	for (uint32_t i = 0; i < VkRenderer.DynamicBuffers.Size; i++)
 	{

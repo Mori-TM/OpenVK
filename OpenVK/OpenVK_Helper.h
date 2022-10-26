@@ -55,6 +55,13 @@ typedef enum
 
 typedef enum
 {
+	OPENVK_DESCRIPTOR_POOL_DEFAULT = 0x1,
+	OPENVK_DESCRIPTOR_POOL_FREEABLE = 0x1,
+	OPENVK_DESCRIPTOR_POOL_UPDATABLE = 0x2,
+} OpenVkDescriptorPoolType;
+
+typedef enum
+{
 	OPENVK_DESCRIPTOR_TYPE_UNIFORM_BUFFER = 0x0,
 	OPENVK_DESCRIPTOR_TYPE_DYNAMIC_UNIFORM_BUFFER = 0x1,
 	OPENVK_DESCRIPTOR_TYPE_IMAGE_SAMPLER = 0x2,
@@ -104,12 +111,6 @@ typedef struct
 
 typedef struct
 {
-	OpenVkBool	Dynamic;
-	uint32_t	DescriptorPool;
-} OpenVkDescriptorPool;
-
-typedef struct
-{
 	uint32_t		PushConstantCount;
 	uint32_t*		PushConstantShaderTypes;
 	uint32_t*		PushConstantOffsets;
@@ -154,19 +155,20 @@ typedef struct
 
 typedef struct
 {
-	uint32_t 				DescriptorSetLayout;
-	OpenVkDescriptorPool 	DescriptorPool;
-	uint32_t				DescriptorWriteCount;
-	uint32_t*				DescriptorCounts;
-	uint32_t*				DescriptorTypes;
-	uint32_t*				UniformBuffers;
-	size_t*					UniformBufferSizes;
-	uint32_t*				Sampler;
-	uint32_t*				ImageTypes;
-	uint32_t*				Images;
-	uint32_t*				ImageLayouts;
-	uint32_t*				TopLevelAS;
-	uint32_t*				Bindings;
+	uint32_t	DescriptorSetLayout;
+	uint32_t 	DescriptorPool;
+	uint32_t	DescriptorWriteCount;
+	uint32_t*	DescriptorCounts;
+	uint32_t*	DescriptorTypes;
+	uint32_t*	UniformBuffers;
+	size_t*		UniformBufferSizes;
+	uint32_t*	Sampler;
+	uint32_t*	ImageTypes;
+	uint32_t*	Images;
+	uint32_t*	ImageLayouts;
+	uint32_t*	TopLevelAS;
+	uint32_t*	Bindings;
+	uint32_t*	DescriptorSet;
 } OpenVkDescriptorSetCreateInfo;
 
 typedef struct
