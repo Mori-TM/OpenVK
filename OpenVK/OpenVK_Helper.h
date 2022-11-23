@@ -67,7 +67,28 @@ typedef enum
 	OPENVK_DESCRIPTOR_TYPE_IMAGE_SAMPLER = 0x2,
 	OPENVK_DESCRIPTOR_TYPE_STORAGE_IMAGE = 0x3,
 	OPENVK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE = 0x4,
+	OPENVK_DESCRIPTOR_TYPE_STORAGE_BUFFER = 0x5,
 } OpenVkDescriptorType;
+
+typedef enum
+{
+	OPENVK_FORMAT_DEFAULT = 0x0,
+
+	OPENVK_FORMAT_R = 0x1,
+	OPENVK_FORMAT_RG = 0x2,
+	OPENVK_FORMAT_RGB = 0x3,
+	OPENVK_FORMAT_RGBA = 0x4,
+	
+	OPENVK_FORMAT_R16F = 0x5,
+	OPENVK_FORMAT_RG16F = 0x6,
+	OPENVK_FORMAT_RGB16F = 0x7,
+	OPENVK_FORMAT_RGBA16F = 0x8,
+
+	OPENVK_FORMAT_R32F = 0x9,
+	OPENVK_FORMAT_RG32F = 0xA,
+	OPENVK_FORMAT_RGB32F = 0xB,
+	OPENVK_FORMAT_RGBA32F = 0xC,
+} OpenVkFormats;
 
 typedef enum
 {
@@ -141,6 +162,7 @@ typedef struct
 	OpenVkBool		AlphaBlending;
 	uint32_t		ColorBlendAttachments;
 	OpenVkBool		DepthStencil;
+	uint32_t		PipelineLayout;
 	uint32_t		RenderPass;
 } OpenVkGraphicsPipelineCreateInfo;
 
@@ -160,8 +182,8 @@ typedef struct
 	uint32_t	DescriptorWriteCount;
 	uint32_t*	DescriptorCounts;
 	uint32_t*	DescriptorTypes;
-	uint32_t*	UniformBuffers;
-	size_t*		UniformBufferSizes;
+	uint32_t*	Buffers;
+	size_t*		BufferSizes;
 	uint32_t*	Sampler;
 	uint32_t*	ImageTypes;
 	uint32_t*	Images;
@@ -200,7 +222,7 @@ void* OpenVkMalloc(size_t Size)
 {
 	void* Mem = malloc(Size);
 	if (Mem == NULL)
-		OpenVkRuntimeError("Failed to allcoate Memory!");
+		OpenVkRuntimeError("Failed to allocate Memory!");
 
 	return Mem;
 }
@@ -209,7 +231,7 @@ void* OpenVkRealloc(void* Data, size_t Size)
 {
 	void* Mem = realloc(Data, Size);
 	if (Mem == NULL)
-		OpenVkRuntimeError("Failed to reallcoate Memory!");
+		OpenVkRuntimeError("Failed to reallocate Memory!");
 
 	return Mem;
 }

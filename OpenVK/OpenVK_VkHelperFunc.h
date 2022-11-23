@@ -594,6 +594,58 @@ VkSampleCountFlagBits VkGetMaxSampleCount()
 	return VK_SAMPLE_COUNT_1_BIT;
 }
 
+//get the vulkan color format from openvk
+VkFormat VkGetOpenVkFormat(uint32_t Format)
+{
+	VkFormat ColorFormat = VkRenderer.SwapChainImageFormat;
+
+	switch (Format)
+	{
+	case OPENVK_FORMAT_R:
+		ColorFormat = VK_FORMAT_R8_UNORM;
+		break;
+	case OPENVK_FORMAT_RG:
+		ColorFormat = VK_FORMAT_R8G8_UNORM;
+		break;
+	case OPENVK_FORMAT_RGB:
+		ColorFormat = VK_FORMAT_R8G8B8_UNORM;
+		break;
+	case OPENVK_FORMAT_RGBA:
+		ColorFormat = VK_FORMAT_R8G8B8A8_UNORM;
+		break;
+
+	case OPENVK_FORMAT_R16F:
+		ColorFormat = VK_FORMAT_R16_SFLOAT;
+		break;
+	case OPENVK_FORMAT_RG16F:
+		ColorFormat = VK_FORMAT_R16G16_SFLOAT;
+		break;
+	case OPENVK_FORMAT_RGB16F:
+		ColorFormat = VK_FORMAT_R16G16B16_SFLOAT;
+		break;
+	case OPENVK_FORMAT_RGBA16F:
+		ColorFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
+		break;
+
+	case OPENVK_FORMAT_R32F:
+		ColorFormat = VK_FORMAT_R32_SFLOAT;
+		break;
+	case OPENVK_FORMAT_RG32F:
+		ColorFormat = VK_FORMAT_R32G32_SFLOAT;
+		break;
+	case OPENVK_FORMAT_RGB32F:
+		ColorFormat = VK_FORMAT_R32G32B32_SFLOAT;
+		break;
+	case OPENVK_FORMAT_RGBA32F:
+		ColorFormat = VK_FORMAT_R32G32B32A32_SFLOAT;
+		break;
+	default:
+		break;
+	}
+
+	return ColorFormat;
+}
+
 void VkSetImageLayout(VkCommandBuffer CommandBuffer, VkImage Image, VkImageLayout OldImageLayout, VkImageLayout NewImageLayout, uint32_t MipLevels, VkImageSubresourceRange* SubresourceRange)
 {
 	VkImageMemoryBarrier ImageMemoryBarrier;

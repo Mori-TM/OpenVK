@@ -40,14 +40,14 @@ void Free(void* Data)
 #include "OpenVK_Helper.h"
 
 //FIX Vulkan
-//descriptor pools get destroy every resize except the dynamic one thats pretty fucked up
+//don't use VK_PIPELINE_STAGE_ALL_COMMANDS_BIT 
 #include "OpenVK_VkHelperFunc.h"
 #include "OpenVK_VkRaytracing.h"
 #include "OpenVK_VkRenderer.h"
 
 void		(*OpenVkDestroyRenderer				)();
 void		(*OpenVkRecreateSwapChain			)(uint32_t* Width, uint32_t* Height);
-uint32_t	(*OpenVkCreateRenderPass			)(uint32_t ColorAttachmentCount, OpenVkBool DepthAttachment, OpenVkBool MsaaAttachment, uint32_t MsaaSamples, OpenVkBool Sampled);
+uint32_t	(*OpenVkCreateRenderPass			)(uint32_t ColorAttachmentCount, uint32_t* ColorFormats, OpenVkBool DepthAttachment, uint32_t DepthFormat, OpenVkBool MsaaAttachment, uint32_t MsaaSamples, OpenVkBool Sampled);
 uint32_t	(*OpenVkCreateGraphicsPipeline		)(OpenVkGraphicsPipelineCreateInfo* Info);
 uint32_t	(*OpenVkCreatePipelineLayout		)(OpenVkPipelineLayoutCreateInfo* Info);
 uint32_t	(*OpenVkCreateFramebuffer			)(OpenVkFramebufferCreateInfo* Info);
@@ -62,13 +62,13 @@ OpenVkBool	(*OpenVkEndFrame					)();
 void		(*OpenVkBeginRenderPass				)(OpenVkBeginRenderPassInfo* Info);
 void		(*OpenVkEndRenderPass				)();
 uint32_t	(*OpenVkCreateTextureImage			)(const char* Path, OpenVkBool FlipVertical);
-uint32_t	(*OpenVkCreateStorageImage			)(uint32_t Width, uint32_t Height);
+uint32_t	(*OpenVkCreateStorageImage			)(uint32_t Width, uint32_t Height, uint32_t Format);
 void		(*OpenVkDestroyImage				)(uint32_t InImage);
 OpenVkBool	(*OpenVkCopyImage					)(uint32_t Width, uint32_t Height, uint32_t Src, uint32_t Dst);
 uint32_t	(*OpenVkCreateImageSampler			)(uint32_t Filter, uint32_t AddressMode);
 void		(*OpenVkDestroySampler				)(uint32_t Sampler);
-uint32_t	(*OpenVkCreateColorImageAttachment	)(uint32_t Width, uint32_t Height, uint32_t MsaaSamples, OpenVkBool Sampled);
-uint32_t	(*OpenVkCreateDepthImageAttachment	)(uint32_t Width, uint32_t Height, uint32_t MsaaSamples, OpenVkBool Sampled);
+uint32_t	(*OpenVkCreateColorImageAttachment	)(uint32_t Width, uint32_t Height, uint32_t MsaaSamples, OpenVkBool Sampled, uint32_t Format);
+uint32_t	(*OpenVkCreateDepthImageAttachment	)(uint32_t Width, uint32_t Height, uint32_t MsaaSamples, OpenVkBool Sampled, uint32_t Format);
 uint32_t	(*OpenVkCreateUniformBuffer			)(size_t Size);
 OpenVkBool	(*OpenVkUpdateBuffer				)(size_t Size, const void* BufferData, uint32_t Buffer);
 uint32_t	(*OpenVkCreateDynamicUniformBuffer	)(size_t Size);
