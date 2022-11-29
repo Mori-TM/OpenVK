@@ -20,6 +20,7 @@ typedef struct
 {
 	VkBuffer Buffers[MAX_FRAMES_IN_FLIGHT];
 	VkDeviceMemory BufferMemories[MAX_FRAMES_IN_FLIGHT];
+	VkDeviceSize Size;
 } VkDynamicBufferInfo;
 
 typedef struct
@@ -56,6 +57,8 @@ typedef struct
 	VkExtent2D SwapChainExtent;
 	VkImage* SwapChainImages;
 	VkImageView* SwapChainImageViews;
+
+	VkDeviceSize BufferMemoryAlignment;
 
 //	uint32_t ImageCount;
 //	VkImage* Images;
@@ -276,22 +279,24 @@ VkImageView VkCreateImageView(VkImage Image, VkFormat Format, VkImageAspectFlags
 	return ImageView;
 }
 
-OpenVkBool VkCreateShaderModule(const char* Path, VkShaderModule* ShaderModule)
+OpenVkBool VkCreateShaderModule(OpenVkFile File, VkShaderModule* ShaderModule)
 {
-	size_t Size;
-	char* Code = OpenVkReadFileData(Path, &Size);
-
 	VkShaderModuleCreateInfo CreateInfo;
 	CreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
 	CreateInfo.pNext = NULL;
 	CreateInfo.flags = 0;
-	CreateInfo.codeSize = Size;
-	CreateInfo.pCode = (uint32_t*)Code;
+	CreateInfo.codeSize = File.Size;
+	CreateInfo.pCode = (const uint32_t*)File.Data;
 
-	if (vkCreateShaderModule(VkRenderer.Device, &CreateInfo, NULL, ShaderModule) != VK_SUCCESS)
+	if (File.Size == 0 || File.Data == NULL || vkCreateShaderModule(VkRenderer.Device, &CreateInfo, NULL, ShaderModule) != VK_SUCCESS)
 		return OpenVkRuntimeError("Failed to Create Shader Module");
 
-	OpenVkFree(Code);
+	if (File.Freeable)
+	{
+		OpenVkFree(File.Data);
+		File.Data = NULL;
+		File.Size = 0;
+	}
 
 	return 1;
 }
@@ -403,6 +408,7 @@ OpenVkBool VkCreateBuffer(VkDeviceSize Size, VkBufferUsageFlags Usage, VkMemoryP
 
 	VkMemoryRequirements MemoryRequirements;
 	vkGetBufferMemoryRequirements(VkRenderer.Device, *Buffer, &MemoryRequirements);
+	VkRenderer.BufferMemoryAlignment = (VkRenderer.BufferMemoryAlignment > MemoryRequirements.alignment) ? VkRenderer.BufferMemoryAlignment : MemoryRequirements.alignment;
 
 	VkMemoryAllocateInfo AllocateInfo;
 	AllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
@@ -423,7 +429,8 @@ OpenVkBool VkCreateBuffer(VkDeviceSize Size, VkBufferUsageFlags Usage, VkMemoryP
 	if (vkAllocateMemory(VkRenderer.Device, &AllocateInfo, NULL, BufferMemory) != VK_SUCCESS)
 		return OpenVkRuntimeError("Failed to Allocate Buffer Memory");
 
-	vkBindBufferMemory(VkRenderer.Device, *Buffer, *BufferMemory, 0);
+	if (vkBindBufferMemory(VkRenderer.Device, *Buffer, *BufferMemory, 0) != VK_SUCCESS)
+		return OpenVkRuntimeError("Failed to bind Buffer Memory");
 
 	return 1;
 }
@@ -473,6 +480,24 @@ uint32_t VkCreateBufferExt(VkBufferUsageFlags SrcUsage, VkMemoryPropertyFlags Sr
 	return CMA_Push(&VkRenderer.StaticBuffers, &BufferInfo);
 }
 
+uint32_t VkCreateDynamicBuffer(size_t Size, VkBufferUsageFlags Usage)
+{
+	VkDynamicBufferInfo Buffer;
+
+	Buffer.Size = OpenVkAlignedSize(Size, VkRenderer.BufferMemoryAlignment);
+
+	for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+		if (VkCreateBuffer(Buffer.Size, Usage, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, &Buffer.Buffers[i], &Buffer.BufferMemories[i]) == OPENVK_ERROR)
+			return OpenVkRuntimeError("Failed to create dynamic vertex buffer");
+
+	VkMemoryRequirements MemoryRequirements;
+	vkGetBufferMemoryRequirements(VkRenderer.Device, Buffer.Buffers[0], &MemoryRequirements);
+	VkRenderer.BufferMemoryAlignment = (VkRenderer.BufferMemoryAlignment > MemoryRequirements.alignment) ? VkRenderer.BufferMemoryAlignment : MemoryRequirements.alignment;
+	Buffer.Size = MemoryRequirements.size;
+
+	return CMA_Push(&VkRenderer.DynamicBuffers, &Buffer);
+}
+
 void VkDestroyBuffer(uint32_t Buffer)
 {
 	vkDeviceWaitIdle(VkRenderer.Device);
@@ -483,7 +508,29 @@ void VkDestroyBuffer(uint32_t Buffer)
 		vkDestroyBuffer(VkRenderer.Device, BufferInfo->Buffer, NULL);
 		vkFreeMemory(VkRenderer.Device, BufferInfo->BufferMemory, NULL);
 		CMA_Pop(&VkRenderer.StaticBuffers, Buffer);
+		return;
 	}
+
+	OpenVkRuntimeError("Failed To Find Static Destroy Buffer");
+}
+
+void VkDestroyDynamicBuffer(uint32_t Buffer)
+{
+	vkDeviceWaitIdle(VkRenderer.Device);
+
+	VkDynamicBufferInfo* BufferInfo = (VkDynamicBufferInfo*)CMA_GetAt(&VkRenderer.DynamicBuffers, Buffer);
+	if (BufferInfo != NULL)
+	{
+		for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+		{
+			vkDestroyBuffer(VkRenderer.Device, BufferInfo->Buffers[i], NULL);
+			vkFreeMemory(VkRenderer.Device, BufferInfo->BufferMemories[i], NULL);
+			CMA_Pop(&VkRenderer.DynamicBuffers, Buffer);
+		}		
+		return;
+	}
+
+	OpenVkRuntimeError("Failed To Find Dynamic Destroy Buffer");
 }
 
 OpenVkBool VkCreateImage(uint32_t Width, uint32_t Height, uint32_t MipLevels, VkSampleCountFlagBits NumSamples, VkFormat Format, VkImageTiling Tiling, VkImageUsageFlags Usage, VkMemoryPropertyFlags Properties, VkImage* Image, VkDeviceMemory* ImageMemory)
@@ -639,6 +686,20 @@ VkFormat VkGetOpenVkFormat(uint32_t Format)
 	case OPENVK_FORMAT_RGBA32F:
 		ColorFormat = VK_FORMAT_R32G32B32A32_SFLOAT;
 		break;
+
+	case OPENVK_FORMAT_R_UINT:
+		ColorFormat = VK_FORMAT_R8_UINT;
+		break;
+	case OPENVK_FORMAT_RG_UINT:
+		ColorFormat = VK_FORMAT_R8G8_UINT;
+		break;
+	case OPENVK_FORMAT_RGB_UINT:
+		ColorFormat = VK_FORMAT_R8G8B8_UINT;
+		break;
+	case OPENVK_FORMAT_RGBA_UINT:
+		ColorFormat = VK_FORMAT_R8G8B8A8_UINT;
+		break;
+
 	default:
 		break;
 	}

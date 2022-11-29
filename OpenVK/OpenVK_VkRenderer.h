@@ -132,6 +132,7 @@ uint32_t VkCreateRenderer(const char**(*GetExtensions)(uint32_t* ExtensionCount)
 	VkRenderer.StaticBuffers = CMA_Create(sizeof(VkStaticBufferInfo));
 	VkRenderer.DynamicBuffers = CMA_Create(sizeof(VkDynamicBufferInfo));
 	VkRenderer.DescriptorPools = CMA_Create(sizeof(VkDescriptorPoolInfo));
+	VkRenderer.BufferMemoryAlignment = 256;
 
 	//Instance
 	VkApplicationInfo AppInfo;
@@ -634,9 +635,9 @@ uint32_t VkCreateGraphicsPipeline(OpenVkGraphicsPipelineCreateInfo* Info)
 	VkRenderer.Pipelines = (VkPipeline*)OpenVkRealloc(VkRenderer.Pipelines, (VkRenderer.PipelineCount + 1) * sizeof(VkPipeline));
 
 	VkShaderModule VertexShaderModule;
-	VkCreateShaderModule(Info->VertexPath, &VertexShaderModule);
+	VkCreateShaderModule(Info->VertexShader, &VertexShaderModule);
 	VkShaderModule FragmentShaderModule;
-	VkCreateShaderModule(Info->FragmentPath, &FragmentShaderModule);
+	VkCreateShaderModule(Info->FragmentShader, &FragmentShaderModule);
 
 	VkPipelineShaderStageCreateInfo ShaderStageInfos[2];
 	for (uint32_t i = 0; i < 2; i++)
@@ -661,10 +662,11 @@ uint32_t VkCreateGraphicsPipeline(OpenVkGraphicsPipelineCreateInfo* Info)
 	{
 		AttributeDescriptions[i].location = i;
 		AttributeDescriptions[i].binding = 0;
-		if (Info->ShaderAttributeFormats[i] == 1) AttributeDescriptions[i].format = VK_FORMAT_R32_SFLOAT;
-		if (Info->ShaderAttributeFormats[i] == 2) AttributeDescriptions[i].format = VK_FORMAT_R32G32_SFLOAT;
-		if (Info->ShaderAttributeFormats[i] == 3) AttributeDescriptions[i].format = VK_FORMAT_R32G32B32_SFLOAT;
-		if (Info->ShaderAttributeFormats[i] == 4) AttributeDescriptions[i].format = VK_FORMAT_R32G32B32A32_SFLOAT;
+		AttributeDescriptions[i].format = VkGetOpenVkFormat(Info->ShaderAttributeFormats[i]);
+	//	if (Info->ShaderAttributeFormats[i] == 1) AttributeDescriptions[i].format = VK_FORMAT_R32_SFLOAT;
+	//	if (Info->ShaderAttributeFormats[i] == 2) AttributeDescriptions[i].format = VK_FORMAT_R32G32_SFLOAT;
+	//	if (Info->ShaderAttributeFormats[i] == 3) AttributeDescriptions[i].format = VK_FORMAT_R32G32B32_SFLOAT;
+	//	if (Info->ShaderAttributeFormats[i] == 4) AttributeDescriptions[i].format = VK_FORMAT_R32G32B32A32_SFLOAT;
 		AttributeDescriptions[i].offset = Info->ShaderAttributeOffsets[i];
 	}
 
@@ -1337,26 +1339,26 @@ void VkEndRenderPass()
 	vkCmdEndRenderPass(VkRenderer.CommandBuffers[VkRenderer.ImageIndex]);
 }
 
-uint32_t VkCreateTextureImage(const char* Path, OpenVkBool FlipVertical)
+uint32_t VkCreateTextureImage(unsigned char* Pixels, int32_t Width, int32_t Height, uint32_t Format)
 {
 //	VkRenderer.TextureImageMemories = (VkDeviceMemory*)OpenVkRealloc(VkRenderer.TextureImageMemories, (VkRenderer.TextureImageCount + 1) * sizeof(VkDeviceMemory));
 //	VkRenderer.Images = (VkImage*)OpenVkRealloc(VkRenderer.Images, (VkRenderer.TextureImageCount + 1) * sizeof(VkImage));
 //	VkRenderer.TextureImageViews = (VkImageView*)OpenVkRealloc(VkRenderer.TextureImageViews, (VkRenderer.TextureImageCount + 1) * sizeof(VkImageView));
 
 	VkImageInfo TextureImage;
-	TextureImage.Format = VK_FORMAT_R8G8B8A8_UNORM;
+	TextureImage.Format = VkGetOpenVkFormat(Format);//VK_FORMAT_R8G8B8A8_UNORM;
 
-	int32_t TextureWidth;
-	int32_t TextureHeight;
-	int32_t TextureChannels;
+//	int32_t TextureWidth;
+//	int32_t TextureHeight;
+//	int32_t TextureChannels;
+//
+//	stbi_set_flip_vertically_on_load(FlipVertical);
+//	unsigned char* Pixel = stbi_load(Path, &TextureWidth, &TextureHeight, &TextureChannels, STBI_rgb_alpha);
+	VkRenderer.MipLevels = floorf(log2f(MAX(Width, Height))) + 1;
 
-	stbi_set_flip_vertically_on_load(FlipVertical);
-	unsigned char* Pixel = stbi_load(Path, &TextureWidth, &TextureHeight, &TextureChannels, STBI_rgb_alpha);
-	VkRenderer.MipLevels = floorf(log2f(MAX(TextureWidth, TextureHeight))) + 1;
-
-	VkDeviceSize ImageSize = TextureWidth * TextureHeight * 4;
-	if (!Pixel)
-		return OpenVkRuntimeError("Failed to Load Texture");
+	VkDeviceSize ImageSize = Width * Height * Format;
+	if (!Pixels)
+		return OpenVkRuntimeError("Invalid Texture");
 
 	VkBuffer StagingBuffer;
 	VkDeviceMemory StagingBufferMemory;
@@ -1366,12 +1368,12 @@ uint32_t VkCreateTextureImage(const char* Path, OpenVkBool FlipVertical)
 
 	void* Data;
 	vkMapMemory(VkRenderer.Device, StagingBufferMemory, 0, ImageSize, 0, &Data);
-	memcpy(Data, Pixel, ImageSize);
+	memcpy(Data, Pixels, ImageSize);
 	vkUnmapMemory(VkRenderer.Device, StagingBufferMemory);
 
-	OpenVkFree(Pixel);
+	OpenVkFree(Pixels);
 
-	if (VkCreateImage(TextureWidth, TextureHeight, VkRenderer.MipLevels, VK_SAMPLE_COUNT_1_BIT, TextureImage.Format, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &TextureImage.Image, &TextureImage.ImageMemory) == OPENVK_ERROR)
+	if (VkCreateImage(Width, Height, VkRenderer.MipLevels, VK_SAMPLE_COUNT_1_BIT, TextureImage.Format, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &TextureImage.Image, &TextureImage.ImageMemory) == OPENVK_ERROR)
 		return OpenVkRuntimeError("Failed to create Texture Image");
 
 //	VkTransitionImageLayout(TextureImage.Image, TextureImage.Format, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VkRenderer.MipLevels);
@@ -1379,10 +1381,10 @@ uint32_t VkCreateTextureImage(const char* Path, OpenVkBool FlipVertical)
 	VkSetImageLayout(CommandBuffer, TextureImage.Image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VkRenderer.MipLevels, NULL);
 	VkEndSingleTimeCommandBuffer(CommandBuffer);
 
-	VkCopyBufferToImage(StagingBuffer, TextureImage.Image, TextureWidth, TextureHeight);
+	VkCopyBufferToImage(StagingBuffer, TextureImage.Image, Width, Height);
 	//	if (TransitionImageLayout(TextureImages, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, MipLevels) != VK_SUCCESS)
 	//		return 1;
-	VkGenerateMipmaps(TextureImage.Image, TextureImage.Format, TextureWidth, TextureHeight, VkRenderer.MipLevels);
+	VkGenerateMipmaps(TextureImage.Image, TextureImage.Format, Width, Height, VkRenderer.MipLevels);
 
 	vkDestroyBuffer(VkRenderer.Device, StagingBuffer, NULL);
 	vkFreeMemory(VkRenderer.Device, StagingBufferMemory, NULL);
@@ -1586,6 +1588,17 @@ uint32_t VkCreateIndexBuffer(size_t Size, const void* Indices)
 							 Size, Indices);
 }
 
+//FIX? Add raytracing support
+uint32_t VkCreateDynamicVertexBuffer(size_t Size)
+{
+	return VkCreateDynamicBuffer(Size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
+}
+
+//FIX? Add raytracing support
+uint32_t VkCreateDynamicIndexBuffer(size_t Size)
+{
+	return VkCreateDynamicBuffer(Size, VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
+}
 
 uint32_t VkCreateUniformBuffer(size_t Size)
 {
@@ -1600,7 +1613,7 @@ uint32_t VkCreateUniformBuffer(size_t Size)
 
 uint32_t VkCreateDynamicUniformBuffer(size_t Size)
 {
-	//FIX make it working? and add MAX_FRAMES_IN_FLIGHT
+	//FIX make it working?
 /*
 	VkRenderer.StaticBuffers = (VkBuffer*)OpenVkRealloc(VkRenderer.StaticBuffers, (VkRenderer.BufferCount + 1) * sizeof(VkBuffer));
 	VkRenderer.BufferMemories = (VkDeviceMemory*)OpenVkRealloc(VkRenderer.BufferMemories, (VkRenderer.BufferCount + 1) * sizeof(VkDeviceMemory));
@@ -1612,7 +1625,7 @@ uint32_t VkCreateDynamicUniformBuffer(size_t Size)
 
 	return VkRenderer.BufferCount - 1;
 */
-	return 0;
+	return VkCreateDynamicBuffer(Size, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
 }
 
 OpenVkBool VkUpdateBuffer(size_t Size, const void* BufferData, uint32_t Buffer)
@@ -1629,8 +1642,28 @@ OpenVkBool VkUpdateBuffer(size_t Size, const void* BufferData, uint32_t Buffer)
 	return OpenVkTrue;
 }
 
-void VkUpdateDynamicUniformBuffer(size_t Size, const void* UBO, uint32_t UniformBuffer)
+OpenVkBool VkUpdateDynamicBuffer(size_t Size, const void* Data, uint32_t Buffer)
 {
+	VkDynamicBufferInfo* BufferPTR = (VkDynamicBufferInfo*)CMA_GetAt(&VkRenderer.DynamicBuffers, Buffer);
+	if (BufferPTR == NULL)
+		return OpenVkRuntimeError("Failed to find dynamic update buffer");
+
+	void* CopyData;
+	vkMapMemory(VkRenderer.Device, BufferPTR->BufferMemories[VkRenderer.CurrentFrame], 0, BufferPTR->Size, 0, &CopyData);
+	memcpy(CopyData, Data, Size);
+
+	VkMappedMemoryRange MemoryRange;
+	MemoryRange.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
+	MemoryRange.pNext = NULL;
+	MemoryRange.memory = BufferPTR->BufferMemories[VkRenderer.CurrentFrame];
+	MemoryRange.offset = 0;
+	MemoryRange.size = VK_WHOLE_SIZE;
+	vkFlushMappedMemoryRanges(VkRenderer.Device, 1, &MemoryRange);
+
+	vkUnmapMemory(VkRenderer.Device, BufferPTR->BufferMemories[VkRenderer.CurrentFrame]);
+
+	return OpenVkTrue;
+
 	//FIX doesn't work I guess?
 	/*
 	void* Data;
@@ -1701,6 +1734,25 @@ void VkBindIndexBuffer(uint32_t VertexBuffer, uint32_t IndexBuffer)
 		vkCmdBindVertexBuffers(VkRenderer.CommandBuffers[VkRenderer.ImageIndex], 0, 1, &VertexBufferInfo->Buffer, Offsets);
 	if (IndexBufferInfo != NULL)
 		vkCmdBindIndexBuffer(VkRenderer.CommandBuffers[VkRenderer.ImageIndex], IndexBufferInfo->Buffer, 0, VK_INDEX_TYPE_UINT32);
+}
+
+void VkBindDynamicVertexBuffer(uint32_t VertexBuffer)
+{
+	VkDeviceSize Offsets[1] = { 0 };
+	VkDynamicBufferInfo* BufferInfo = (VkDynamicBufferInfo*)CMA_GetAt(&VkRenderer.DynamicBuffers, VertexBuffer);
+	if (BufferInfo != NULL)
+		vkCmdBindVertexBuffers(VkRenderer.CommandBuffers[VkRenderer.ImageIndex], 0, 1, &BufferInfo->Buffers[VkRenderer.CurrentFrame], Offsets);
+}
+
+void VkBindDynamicIndexBuffer(uint32_t VertexBuffer, uint32_t IndexBuffer)
+{
+	VkDeviceSize Offsets[1] = { 0 };
+	VkDynamicBufferInfo* VertexBufferInfo = (VkDynamicBufferInfo*)CMA_GetAt(&VkRenderer.DynamicBuffers, VertexBuffer);
+	VkDynamicBufferInfo* IndexBufferInfo = (VkDynamicBufferInfo*)CMA_GetAt(&VkRenderer.DynamicBuffers, IndexBuffer);
+	if (VertexBufferInfo != NULL)
+		vkCmdBindVertexBuffers(VkRenderer.CommandBuffers[VkRenderer.ImageIndex], 0, 1, &VertexBufferInfo->Buffers[VkRenderer.CurrentFrame], Offsets);
+	if (IndexBufferInfo != NULL)
+		vkCmdBindIndexBuffer(VkRenderer.CommandBuffers[VkRenderer.ImageIndex], IndexBufferInfo->Buffers[VkRenderer.CurrentFrame], 0, VK_INDEX_TYPE_UINT32);
 }
 
 void VkDrawVertices(uint32_t VertexCount)

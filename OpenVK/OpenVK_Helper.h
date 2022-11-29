@@ -88,6 +88,11 @@ typedef enum
 	OPENVK_FORMAT_RG32F = 0xA,
 	OPENVK_FORMAT_RGB32F = 0xB,
 	OPENVK_FORMAT_RGBA32F = 0xC,
+
+	OPENVK_FORMAT_R_UINT = 0xD,
+	OPENVK_FORMAT_RG_UINT = 0xE,
+	OPENVK_FORMAT_RGB_UINT = 0xF,
+	OPENVK_FORMAT_RGBA_UINT = 0x10,
 } OpenVkFormats;
 
 typedef enum
@@ -132,6 +137,13 @@ typedef struct
 
 typedef struct
 {
+	size_t Size;
+	char* Data;
+	OpenVkBool Freeable;
+} OpenVkFile;
+
+typedef struct
+{
 	uint32_t		PushConstantCount;
 	uint32_t*		PushConstantShaderTypes;
 	uint32_t*		PushConstantOffsets;
@@ -142,8 +154,8 @@ typedef struct
 
 typedef struct
 {
-	const char*		VertexPath;
-	const char*		FragmentPath;
+	OpenVkFile		VertexShader;
+	OpenVkFile		FragmentShader;
 	size_t			BindingStride;
 	uint32_t		ShaderAttributeFormatCount;
 	uint32_t*		ShaderAttributeFormats;
@@ -244,14 +256,21 @@ void OpenVkFree(void* Data)
 		OpenVkRuntimeError("No Memory to free!");
 }
 
-char* OpenVkReadFileData(const char* Path, size_t* Size)
+OpenVkFile OpenVkReadFile(const char* Path)
 {
 	char* Buffer = NULL;
 	size_t Length = 0;
 
 	FILE* File = fopen(Path, "rb");
 	if (!File)
-		return NULL;
+	{
+		OpenVkFile F;
+		F.Size = Length;
+		F.Data = Buffer;
+		F.Freeable = OpenVkFalse;
+		OpenVkRuntimeError("Failed to load file");
+		return F;
+	}
 
 	fseek(File, 0, SEEK_END);
 	Length = ftell(File);
@@ -262,8 +281,22 @@ char* OpenVkReadFileData(const char* Path, size_t* Size)
 
 	fclose(File);
 
-	*Size = Length;
-	return Buffer;
+	OpenVkFile F;
+	F.Size = Length;
+	F.Data = Buffer;
+	F.Freeable = OpenVkTrue;
+	return F;
+}
+
+OpenVkBool OpenVkLoadTexture(const char* Path, OpenVkBool FlipVertical, unsigned char** Pixels, int32_t* Width, int32_t* Height, int32_t Comp)
+{
+	stbi_set_flip_vertically_on_load(FlipVertical);
+	int32_t TextureChannels;
+	*Pixels = stbi_load(Path, Width, Height, &TextureChannels, STBI_rgb_alpha);
+	if (*Pixels == NULL)
+		return OpenVkRuntimeError("Failed to load texture");
+
+	return OpenVkTrue;
 }
 
 uint32_t OpenVkAlignedSize(uint32_t Value, uint32_t Alignment)

@@ -586,7 +586,7 @@ OpenVkBool VkCreateTopLevelAccelerationStructure(uint32_t InstanceCount, uint32_
 	return CMA_Push(&VkRaytracer.TopLevelAS, &TopLevelAS);
 }
 
-uint32_t VkCreateRaytracingPipeline(uint32_t MaxPipelineRayRecursionDepth, uint32_t PipelineLayout, uint32_t ShaderCount, uint32_t* ShaderTypes, const char** Shader)
+uint32_t VkCreateRaytracingPipeline(uint32_t MaxPipelineRayRecursionDepth, uint32_t PipelineLayout, uint32_t ShaderCount, uint32_t* ShaderTypes, OpenVkFile* Shader)
 {
 	VkRenderer.Pipelines = (VkPipeline*)OpenVkRealloc(VkRenderer.Pipelines, (VkRenderer.PipelineCount + 1) * sizeof(VkPipeline));
 	VkPipelineShaderStageCreateInfo* ShaderStages = (VkPipelineShaderStageCreateInfo*)OpenVkMalloc(ShaderCount * sizeof(VkPipelineShaderStageCreateInfo));
