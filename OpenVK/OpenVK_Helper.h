@@ -312,7 +312,7 @@ void* OpenVkAlignedMalloc(size_t Size, size_t Alignment)
 #else
 	int Res = posix_memalign(&Data, Alignment, Size);
 	if (Res != 0)
-		Data = nullptr;
+		Data = NULL;
 #endif
 	return Data;
 }
