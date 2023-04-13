@@ -1,10 +1,11 @@
 void		(*OpenVkDestroyRenderer				)();
+void		(*OpenVkDeviceWaitIdle				)();
 void		(*OpenVkRecreateSwapChain			)(uint32_t* Width, uint32_t* Height);
-uint32_t	(*OpenVkCreateRenderPass			)(uint32_t ColorAttachmentCount, uint32_t* ColorFormats, OpenVkBool DepthAttachment, uint32_t DepthFormat, OpenVkBool MsaaAttachment, uint32_t MsaaSamples, OpenVkBool Sampled);
+uint32_t	(*OpenVkCreateRenderPass			)(uint32_t AttachmentCount, uint32_t* Attachments, uint32_t* AttachmentFormats, uint32_t* MsaaSamples, uint32_t* ResolveAttachments, OpenVkBool Sampled);
 uint32_t	(*OpenVkCreateGraphicsPipeline		)(OpenVkGraphicsPipelineCreateInfo* Info);
 uint32_t	(*OpenVkCreatePipelineLayout		)(OpenVkPipelineLayoutCreateInfo* Info);
 uint32_t	(*OpenVkCreateFramebuffer			)(OpenVkFramebufferCreateInfo* Info);
-uint32_t	(*OpenVkCreateDescriptorSetLayout	)(uint32_t BindingCount, uint32_t* Bindings, uint32_t* DescriptorCounts, uint32_t* DescriptorTypes, uint32_t* ShaderTypes);
+uint32_t	(*OpenVkCreateDescriptorSetLayout	)(uint32_t BindingCount, uint32_t* Bindings, uint32_t* DescriptorCounts, uint32_t* DescriptorTypes, uint32_t* DescriptorFlags, uint32_t* ShaderTypes);
 uint32_t	(*OpenVkCreateDescriptorPool		)(uint32_t DescriptorPoolType, uint32_t PoolSizeCount, uint32_t* DescriptorTypes, uint32_t* DescriptorCounts);
 OpenVkBool	(*OpenVkFreeDescriptorSet			)(uint32_t DescriptorPool, uint32_t DescriptorSet);
 OpenVkBool	(*OpenVkDestroyDescriptorPool		)(uint32_t DescriptorPool);
@@ -99,6 +100,7 @@ extern inline uint32_t OpenVkCreateRenderer(uint32_t RendererFlags, const char**
 	{
 		OpenVkRuntimeInfo("Renderer: ", "Vulkan");
 		OpenVkDestroyRenderer = VkDestroyRenderer;
+		OpenVkDeviceWaitIdle = VkDeviceWaitIdle;
 		OpenVkRecreateSwapChain = VkRecreateSwapChain;
 		OpenVkCreateRenderPass = VkCreateRenderPass;
 		OpenVkCreateGraphicsPipeline = VkCreateGraphicsPipeline;

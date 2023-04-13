@@ -42,6 +42,7 @@ typedef struct
 	VkPhysicalDeviceBufferDeviceAddressFeatures EnabledBufferDeviceAddresFeatures;
 	VkPhysicalDeviceRayTracingPipelineFeaturesKHR EnabledRayTracingPipelineFeatures;
 	VkPhysicalDeviceAccelerationStructureFeaturesKHR EnabledAccelerationStructureFeatures;
+	VkPhysicalDeviceDescriptorIndexingFeaturesEXT EnabledDescriptorIndexingFeatures;
 
 	VkPhysicalDeviceFeatures2 PhysicalDeviceFeatures2;
 
@@ -75,8 +76,14 @@ void VkGetRaytracingFeatures(VkDeviceCreateInfo* DeviceCreateInfo)
 	VkRaytracer.BottomLevelAS = CMA_Create(sizeof(VkAccelerationStructure));
 	VkRaytracer.TopLevelAS = CMA_Create(sizeof(VkAccelerationStructure));
 
+	VkRaytracer.EnabledDescriptorIndexingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES_EXT;
+	VkRaytracer.EnabledDescriptorIndexingFeatures.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
+	VkRaytracer.EnabledDescriptorIndexingFeatures.runtimeDescriptorArray = VK_TRUE;
+	VkRaytracer.EnabledDescriptorIndexingFeatures.descriptorBindingVariableDescriptorCount = VK_TRUE;
+
 	VkRaytracer.EnabledBufferDeviceAddresFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES;
 	VkRaytracer.EnabledBufferDeviceAddresFeatures.bufferDeviceAddress = VK_TRUE;
+	VkRaytracer.EnabledBufferDeviceAddresFeatures.pNext = &VkRaytracer.EnabledDescriptorIndexingFeatures;
 
 	VkRaytracer.EnabledRayTracingPipelineFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR;
 	VkRaytracer.EnabledRayTracingPipelineFeatures.rayTracingPipeline = VK_TRUE;
@@ -93,6 +100,7 @@ void VkGetRaytracingFeatures(VkDeviceCreateInfo* DeviceCreateInfo)
 	VkRenderer.DeviceExtensions[VkRenderer.DeviceExtensionCount++] = VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME;
 	VkRenderer.DeviceExtensions[VkRenderer.DeviceExtensionCount++] = VK_KHR_SPIRV_1_4_EXTENSION_NAME;
 	VkRenderer.DeviceExtensions[VkRenderer.DeviceExtensionCount++] = VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME;
+	VkRenderer.DeviceExtensions[VkRenderer.DeviceExtensionCount++] = VK_KHR_MAINTENANCE3_EXTENSION_NAME;
 
 	for (uint32_t i = 0; i < VkRenderer.DeviceExtensionCount; i++)
 		printf("Ext: %s\n", VkRenderer.DeviceExtensions[i]);
@@ -277,7 +285,7 @@ typedef struct
 	size_t	 VertexSize;
 } OpenVkRaytracingGeometryCreateInfo;
 
-//check if CMA_GetAt is NULL
+//check if CMA_GetAt is NULL and if buffers are dynamic!
 uint32_t VkCreateRaytracingGeometry(uint32_t VertexFormat, size_t VertexSize, uint32_t VertexCount, uint32_t VertexBuffer, uint32_t IndexCount, uint32_t IndexBuffer, uint32_t TranformBuffer)
 {
 	VkDeviceOrHostAddressConstKHR VertexBufferDeviceAddress;
@@ -661,7 +669,7 @@ uint32_t VkCreateRaytracingPipeline(uint32_t MaxPipelineRayRecursionDepth, uint3
 	return VkRenderer.PipelineCount++;
 }
 
-uint32_t* VkCreateShaderBindingTable(uint32_t Pipeline, uint32_t ShaderCount)
+uint32_t* VkCreateShaderBindingTable(uint32_t Pipeline, uint32_t ShaderCount, uint32_t* HandleCount)
 {
 	VkRaytracer.ShaderBindings = (uint32_t*)OpenVkRealloc(VkRaytracer.ShaderBindings, (VkRaytracer.ShaderBindingCount + ShaderCount) * sizeof(uint32_t));
 
@@ -677,21 +685,24 @@ uint32_t* VkCreateShaderBindingTable(uint32_t Pipeline, uint32_t ShaderCount)
 		return NULL;
 	}
 		
-
+	uint32_t j = 0;
 	for (uint32_t i = 0; i < ShaderCount; i++)
 	{
 		VkRaytracer.ShaderBindings[VkRaytracer.ShaderBindingCount] = VkCreateBufferExt(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
 			VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-			HandleSize, ShaderHandleStorage + (HandleSizeAligned * i));
+			HandleSize * HandleCount[i], ShaderHandleStorage + (HandleSizeAligned * j));
+
+		OpenVkRuntimeError("Shader: %d, HandleCount: %d, HandleOffset: %d, Offset: %d\n", i, HandleCount[i], (HandleSizeAligned * j), j);
 
 		VkRaytracer.ShaderBindingCount++;
+		j += HandleCount[i];
 	}
 
 
 	return VkRaytracer.ShaderBindings + (VkRaytracer.ShaderBindingCount - ShaderCount);
 }
 
-void VkTraceRays(uint32_t Width, uint32_t Height, uint32_t RaygenShader, uint32_t MissShader, uint32_t HitShader)
+void VkTraceRays(uint32_t Width, uint32_t Height, uint32_t RaygenShader, uint32_t RaygenHandleCount, uint32_t MissShader, uint32_t MissHandleCount, uint32_t HitShader, uint32_t HitHandleCount)
 {
 	const uint32_t HandleSizeAligned = OpenVkAlignedSize(VkRaytracer.RayTracingPipelineProperties.shaderGroupHandleSize, VkRaytracer.RayTracingPipelineProperties.shaderGroupHandleAlignment);
 
@@ -702,17 +713,17 @@ void VkTraceRays(uint32_t Width, uint32_t Height, uint32_t RaygenShader, uint32_
 	VkStridedDeviceAddressRegionKHR RaygenShaderSbtEntry;
 	RaygenShaderSbtEntry.deviceAddress = VkGetBufferDeviceAddress(RayBufferInfo->Buffer);
 	RaygenShaderSbtEntry.stride = HandleSizeAligned;
-	RaygenShaderSbtEntry.size = HandleSizeAligned;
+	RaygenShaderSbtEntry.size = HandleSizeAligned * RaygenHandleCount;
 
 	VkStridedDeviceAddressRegionKHR MissShaderSbtEntry;
 	MissShaderSbtEntry.deviceAddress = VkGetBufferDeviceAddress(MissBufferInfo->Buffer);
 	MissShaderSbtEntry.stride = HandleSizeAligned;
-	MissShaderSbtEntry.size = HandleSizeAligned;
+	MissShaderSbtEntry.size = HandleSizeAligned * MissHandleCount;
 
 	VkStridedDeviceAddressRegionKHR HitShaderSbtEntry;
 	HitShaderSbtEntry.deviceAddress = VkGetBufferDeviceAddress(HitBufferInfo->Buffer);
 	HitShaderSbtEntry.stride = HandleSizeAligned;
-	HitShaderSbtEntry.size = HandleSizeAligned;
+	HitShaderSbtEntry.size = HandleSizeAligned * HitHandleCount;
 
 	VkStridedDeviceAddressRegionKHR CallableShaderSbtEntry;
 	memset(&CallableShaderSbtEntry, 0, sizeof(VkStridedDeviceAddressRegionKHR));
