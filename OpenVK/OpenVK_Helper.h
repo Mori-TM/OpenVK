@@ -228,45 +228,45 @@ typedef struct
 
 typedef struct
 {
-	size_t Size;
-	char* Data;
-	OpenVkBool Freeable;
+	size_t		Size;
+	char*		Data;
+	OpenVkBool	Freeable;
 } OpenVkFile;
 
 typedef struct
 {
-	uint32_t		PushConstantCount;
-	uint32_t*		PushConstantShaderTypes;
-	uint32_t*		PushConstantOffsets;
-	uint32_t*		PushConstantSizes;
-	uint32_t		DescriptorSetLayoutCount;
-	uint32_t*		DescriptorSetLayouts;
+	uint32_t	PushConstantCount;
+	uint32_t*	PushConstantShaderTypes;
+	uint32_t*	PushConstantOffsets;
+	uint32_t*	PushConstantSizes;
+	uint32_t	DescriptorSetLayoutCount;
+	uint32_t*	DescriptorSetLayouts;
 } OpenVkPipelineLayoutCreateInfo;
 
 typedef struct
 {
-	OpenVkFile		VertexShader;
-	OpenVkFile		FragmentShader;
-	size_t			BindingStride;
-	uint32_t		ShaderAttributeFormatCount;
-	uint32_t*		ShaderAttributeFormats;
-	uint32_t*		ShaderAttributeOffsets;
-	uint32_t		PrimitiveTopology;
-	uint32_t		x;
-	uint32_t		y;
-	uint32_t		Width;
-	uint32_t		Height;
-	OpenVkBool		DepthClamp;
-	uint32_t		PolygonMode;
-	float			LineWidth;
-	uint32_t		CullMode;
-	uint32_t		FrontFace;
-	uint32_t		MsaaSamples;
-	OpenVkBool		AlphaBlending;
-	uint32_t		ColorBlendAttachments;
-	OpenVkBool		DepthStencil;
-	uint32_t		PipelineLayout;
-	uint32_t		RenderPass;
+	OpenVkFile	VertexShader;
+	OpenVkFile	FragmentShader;
+	size_t		BindingStride;
+	uint32_t	ShaderAttributeFormatCount;
+	uint32_t*	ShaderAttributeFormats;
+	uint32_t*	ShaderAttributeOffsets;
+	uint32_t	PrimitiveTopology;
+	uint32_t	x;
+	uint32_t	y;
+	uint32_t	Width;
+	uint32_t	Height;
+	OpenVkBool	DepthClamp;
+	uint32_t	PolygonMode;
+	float		LineWidth;
+	uint32_t	CullMode;
+	uint32_t	FrontFace;
+	uint32_t	MsaaSamples;
+	OpenVkBool	AlphaBlending;
+	uint32_t	ColorBlendAttachments;
+	OpenVkBool	DepthStencil;
+	uint32_t	PipelineLayout;
+	uint32_t	RenderPass;
 } OpenVkGraphicsPipelineCreateInfo;
 
 typedef struct
@@ -310,6 +310,31 @@ typedef struct
 	uint32_t	Width;
 	uint32_t	Height;
 } OpenVkBeginRenderPassInfo;
+
+typedef struct
+{
+	uint32_t	VertexFormat;
+	size_t		VertexSize;
+	OpenVkBool	VertexBufferDynamic;
+	uint32_t	VertexCount;
+	uint32_t	VertexBuffer;
+	OpenVkBool	IndexBufferDynamic;
+	uint32_t	IndexCount;
+	uint32_t	IndexBuffer;
+	uint32_t	TranformBuffer;
+} OpenVkRaytracingGeometryCreateInfo;
+
+typedef struct
+{
+	uint32_t Width;
+	uint32_t Height;
+	uint32_t RaygenShader;
+	uint32_t RaygenHandleCount;
+	uint32_t MissShader;
+	uint32_t MissHandleCount;
+	uint32_t HitShader;
+	uint32_t HitHandleCount;
+} OpenVkTraceRaysInfo;
 
 void OpenVkRuntimeInfo(const char* Msg, const char* Val)
 {

@@ -155,15 +155,48 @@ typedef struct
 
 VkRendererInfo VkRenderer = { NULL };
 
-OpenVkBool VkIsPhysicalDeviceSuitable(VkPhysicalDevice PhysicalDevice)
+uint32_t VkGetBestSuitablePhysicalDevice(uint32_t DeviceCount, VkPhysicalDevice* Devices)
 {
-	vkGetPhysicalDeviceProperties(PhysicalDevice, &VkRenderer.PhysicalDeviceProperties);
-	vkGetPhysicalDeviceFeatures(PhysicalDevice, &VkRenderer.PhysicalDeviceFeatures);
+	uint32_t BestDevice = 0;
+	uint32_t MaxScore = 0;
+	uint32_t Score = 0;
 
-	return VkRenderer.PhysicalDeviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU &&
-		   VkRenderer.PhysicalDeviceFeatures.multiViewport &&
-		   VkRenderer.PhysicalDeviceFeatures.wideLines &&
-		   VkRenderer.PhysicalDeviceFeatures.samplerAnisotropy;
+	if (DeviceCount == 1)
+	{
+		vkGetPhysicalDeviceProperties(Devices[0], &VkRenderer.PhysicalDeviceProperties);
+		vkGetPhysicalDeviceFeatures(Devices[0], &VkRenderer.PhysicalDeviceFeatures);
+		return 0;
+	}
+
+	for (uint32_t i = 0; i < DeviceCount; i++)
+	{
+		Score = 0;
+
+		vkGetPhysicalDeviceProperties(Devices[i], &VkRenderer.PhysicalDeviceProperties);
+		vkGetPhysicalDeviceFeatures(Devices[i], &VkRenderer.PhysicalDeviceFeatures);
+
+		if (VkRenderer.PhysicalDeviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
+			Score++;
+		if (VkRenderer.PhysicalDeviceFeatures.textureCompressionBC == VK_TRUE)
+			Score++;
+		if (VkRenderer.PhysicalDeviceFeatures.depthClamp == VK_TRUE)
+			Score++;
+		if (VkRenderer.PhysicalDeviceFeatures.samplerAnisotropy == VK_TRUE)
+			Score++;
+		if (VkRenderer.PhysicalDeviceFeatures.multiViewport == VK_TRUE)
+			Score++;
+
+		if (Score > MaxScore)
+		{
+			MaxScore = Score;
+			BestDevice = i;
+		}
+	}
+
+	vkGetPhysicalDeviceProperties(Devices[BestDevice], &VkRenderer.PhysicalDeviceProperties);
+	vkGetPhysicalDeviceFeatures(Devices[BestDevice], &VkRenderer.PhysicalDeviceFeatures);
+
+	return BestDevice;
 }
 
 VkQueueFamilyIndices VkFindQueueFamilies(VkPhysicalDevice PhysicalDevice)
@@ -550,29 +583,6 @@ OpenVkBool VkCreateImage(uint32_t Width, uint32_t Height, uint32_t MipLevels, Vk
 	vkGetPhysicalDeviceImageFormatProperties(VkRenderer.PhysicalDevice, Format, VK_IMAGE_TYPE_2D,
 											 Tiling, Usage,
 											 VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT, &ImageProperties);
-
-	/*
-	VkImageFormatProperties2 ImageProperties2;
-	ImageProperties2.sType = VK_STRUCTURE_TYPE_IMAGE_FORMAT_PROPERTIES_2_KHR;
-	ImageProperties2.pNext = NULL;
-	ImageProperties2.imageFormatProperties = ImageProperties;
-
-	// Enable the required format features for the image
-	VkFormatProperties2 FormatProperties2;
-	FormatProperties2.sType = VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_2;
-	vkGetPhysicalDeviceFormatProperties2(VkRenderer.PhysicalDevice, Format, &FormatProperties2);
-
-	if (FormatProperties2.formatProperties.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_SRC_BIT &&
-		FormatProperties2.formatProperties.linearTilingFeatures & VK_FORMAT_FEATURE_BLIT_DST_BIT)
-	{
-		// Format supports blitting as a destination
-		
-	}
-	else {
-		// Format does not support blitting as a destination
-		OpenVkRuntimeError("Fuck compression not supported");
-	}
-	*/
 
 	if (SupportsBlit != NULL)
 		*SupportsBlit = OpenVkTrue;
