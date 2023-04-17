@@ -508,8 +508,8 @@ void OpenVkGUIInit(uint32_t Width, uint32_t Height, uint32_t RenderPass, uint32_
 //	GraphicsPipelineCreateInfo.FragmentShader.Size = sizeof(OpenVkGUIFragmentShader);
 //	GraphicsPipelineCreateInfo.FragmentShader.Data = (char*)OpenVkGUIFragmentShader;
 //	GraphicsPipelineCreateInfo.FragmentShader.Freeable = OpenVkFalse;
-	GraphicsPipelineCreateInfo.VertexShader = OpenVkReadFile("GUIVertex.spv");
-	GraphicsPipelineCreateInfo.FragmentShader = OpenVkReadFile("GUIFragment.spv");
+	GraphicsPipelineCreateInfo.VertexShader = OpenVkReadFile("Data/Shader/GUIVertex.spv");
+	GraphicsPipelineCreateInfo.FragmentShader = OpenVkReadFile("Data/Shader/GUIFragment.spv");
 	GraphicsPipelineCreateInfo.BindingStride = sizeof(OpenVkGUIVertex);
 	GraphicsPipelineCreateInfo.ShaderAttributeFormatCount = 3;
 	GraphicsPipelineCreateInfo.ShaderAttributeFormats = ShaderAttributeFormats;

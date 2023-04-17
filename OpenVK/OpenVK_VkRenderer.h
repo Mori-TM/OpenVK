@@ -578,8 +578,9 @@ uint32_t VkCreatePipelineLayout(OpenVkPipelineLayoutCreateInfo* Info)
 		PushConstantRanges = (VkPushConstantRange*)OpenVkMalloc(Info->PushConstantCount * sizeof(VkPushConstantRange));
 		for (uint32_t i = 0; i < Info->PushConstantCount; i++)
 		{
-			if (Info->PushConstantShaderTypes[i] == 0) PushConstantRanges[i].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-			if (Info->PushConstantShaderTypes[i] == 1) PushConstantRanges[i].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+			PushConstantRanges[i].stageFlags = VkGetOpenVkShader(Info->PushConstantShaderTypes[i]);
+		//	if (Info->PushConstantShaderTypes[i] == 0) PushConstantRanges[i].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+		//	if (Info->PushConstantShaderTypes[i] == 1) PushConstantRanges[i].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 			PushConstantRanges[i].offset = Info->PushConstantOffsets[i];
 			PushConstantRanges[i].size = Info->PushConstantSizes[i];
 		}
@@ -1626,7 +1627,6 @@ void VkDestroySampler(uint32_t Sampler)
 	}
 }
 
-//I need to come up with an idea to also create a normal vertex/ index buffer when using raytracing
 uint32_t VkCreateVertexBuffer(size_t Size, const void* Vertices)
 {
 	if (OpenVkRendererFlags & OPENVK_RAYTRACING)
@@ -1822,7 +1822,7 @@ void VkBindDescriptorSet(uint32_t PipelineLayout, uint32_t Set, uint32_t Descrip
 //1 = Fragment Shader
 void VkPushConstant(uint32_t PipelineLayout, uint32_t ShaderType, uint32_t Offset, size_t Size, const void* Data)
 {
-	vkCmdPushConstants(VkRenderer.CommandBuffers[VkRenderer.ImageIndex], VkRenderer.PipelineLayouts[PipelineLayout], (ShaderType == 0 ? VK_SHADER_STAGE_VERTEX_BIT : VK_SHADER_STAGE_FRAGMENT_BIT), Offset, Size, Data);
+	vkCmdPushConstants(VkRenderer.CommandBuffers[VkRenderer.ImageIndex], VkRenderer.PipelineLayouts[PipelineLayout], VkGetOpenVkShader(ShaderType), Offset, Size, Data);
 }
 
 void VkCleanupSwapChain()
